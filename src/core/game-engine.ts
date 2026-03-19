@@ -156,32 +156,40 @@ function spawnFoodNearPlayer(state: GameState): Point {
   const head = state.snake[0];
   const rivalHead = state.rivalSnake?.[0];
 
-  // Collect valid candidates within a radius around the player's head
-  // Start with a small radius and expand if needed
-  for (let radius = 3; radius <= Math.max(gridWidth, gridHeight); radius += 2) {
-    const candidates: Point[] = [];
-    const minX = Math.max(0, head.x - radius);
-    const maxX = Math.min(gridWidth - 1, head.x + radius);
-    const minY = Math.max(0, head.y - radius);
-    const maxY = Math.min(gridHeight - 1, head.y + radius);
+  // Score every free cell: we want food close to the player AND far from the rival.
+  // Score = distToRival - distToPlayer (higher is better for the player).
+  // Among the best-scoring cells, pick one at random.
+  let bestScore = -Infinity;
+  let candidates: Point[] = [];
 
-    for (let y = minY; y <= maxY; y++) {
-      for (let x = minX; x <= maxX; x++) {
-        const p = { x, y };
-        if (isOccupied(p, state)) continue;
-        // Ensure the cell is closer to player than to rival
-        if (rivalHead) {
-          const distToPlayer = Math.abs(x - head.x) + Math.abs(y - head.y);
-          const distToRival = Math.abs(x - rivalHead.x) + Math.abs(y - rivalHead.y);
-          if (distToPlayer >= distToRival) continue;
-        }
+  for (let y = 0; y < gridHeight; y++) {
+    for (let x = 0; x < gridWidth; x++) {
+      const p = { x, y };
+      if (isOccupied(p, state)) continue;
+
+      const distToPlayer = Math.abs(x - head.x) + Math.abs(y - head.y);
+      // Don't spawn right on top of the player (too easy / visually weird)
+      if (distToPlayer < 2) continue;
+
+      let score: number;
+      if (rivalHead) {
+        const distToRival = Math.abs(x - rivalHead.x) + Math.abs(y - rivalHead.y);
+        score = distToRival - distToPlayer;
+      } else {
+        score = -distToPlayer;
+      }
+
+      if (score > bestScore) {
+        bestScore = score;
+        candidates = [p];
+      } else if (score === bestScore) {
         candidates.push(p);
       }
     }
+  }
 
-    if (candidates.length > 0) {
-      return candidates[Math.floor(Math.random() * candidates.length)];
-    }
+  if (candidates.length > 0) {
+    return candidates[Math.floor(Math.random() * candidates.length)];
   }
 
   // Fallback: any unoccupied cell
