@@ -133,8 +133,13 @@ btnGoogle.addEventListener('click', async () => {
     return;
   }
   btnGoogle.textContent = 'Signing in...';
-  const user = await signInWithGoogle();
-  if (!user) {
+  try {
+    const user = await signInWithGoogle();
+    if (!user) {
+      btnGoogle.innerHTML = `${googleSvg} Continue with Google`;
+    }
+  } catch (e) {
+    console.error('Google sign-in error:', e);
     btnGoogle.innerHTML = `${googleSvg} Continue with Google`;
   }
 });
@@ -171,7 +176,13 @@ async function setupAuth() {
           const { CloudStorageService } = await import('./data/cloud-storage');
           const cloudStorage = new CloudStorageService(db, user.uid);
           const localProgress = await new LocalStorageService().loadProgress();
-          const cloudProgress = await cloudStorage.loadProgress();
+
+          // Timeout Firestore reads so a missing/disabled Firestore doesn't block the UI
+          const cloudProgress = await Promise.race([
+            cloudStorage.loadProgress(),
+            new Promise<null>(r => setTimeout(() => r(null), 5000)),
+          ]);
+
           if (localProgress && cloudProgress) {
             progress = mergeProgress(localProgress, cloudProgress);
           } else if (cloudProgress) {
@@ -180,11 +191,15 @@ async function setupAuth() {
             progress = localProgress;
           }
           storage = cloudStorage;
-          await storage.saveProgress(progress);
+          await Promise.race([
+            storage.saveProgress(progress),
+            new Promise<void>(r => setTimeout(r, 5000)),
+          ]);
         }
       } catch (e) {
         console.warn('Cloud storage setup failed, using local:', e);
       }
+      await loadProgress();
       showScreen(trackScreen);
       renderTrackSelect();
     }
