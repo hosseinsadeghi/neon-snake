@@ -156,11 +156,36 @@ function spawnFoodNearPlayer(state: GameState): Point {
   const head = state.snake[0];
   const rivalHead = state.rivalSnake?.[0];
 
-  // Strategy: spawn food very close to the player (2-4 cells away).
-  // Among those, pick the one furthest from the rival.
-  // Expand the radius only if nothing is found nearby.
+  // Direction vector the player is currently moving
+  const dir = state.direction;
+  const dx = dir === Direction.RIGHT ? 1 : dir === Direction.LEFT ? -1 : 0;
+  const dy = dir === Direction.DOWN ? 1 : dir === Direction.UP ? -1 : 0;
+
+  // Try to place food directly ahead of the player (2-5 cells in front).
+  // This means the player just keeps moving straight to eat it.
+  for (let dist = 3; dist <= 6; dist++) {
+    const p = { x: head.x + dx * dist, y: head.y + dy * dist };
+    if (p.x >= 0 && p.x < gridWidth && p.y >= 0 && p.y < gridHeight && !isOccupied(p, state)) {
+      return p;
+    }
+  }
+
+  // If straight ahead is blocked, try slightly off-axis (1 cell to the side)
+  for (let dist = 3; dist <= 6; dist++) {
+    for (const offset of [-1, 1]) {
+      const p = {
+        x: head.x + dx * dist + (dy !== 0 ? offset : 0),
+        y: head.y + dy * dist + (dx !== 0 ? offset : 0),
+      };
+      if (p.x >= 0 && p.x < gridWidth && p.y >= 0 && p.y < gridHeight && !isOccupied(p, state)) {
+        return p;
+      }
+    }
+  }
+
+  // Wider fallback: nearby cells, prefer those in front and closer to player than rival
   for (let maxDist = 4; maxDist <= Math.max(gridWidth, gridHeight); maxDist += 3) {
-    let bestRivalDist = -1;
+    let bestScore = -Infinity;
     let candidates: Point[] = [];
 
     const minX = Math.max(0, head.x - maxDist);
@@ -175,17 +200,19 @@ function spawnFoodNearPlayer(state: GameState): Point {
         if (distToPlayer < 2 || distToPlayer > maxDist) continue;
         if (isOccupied(p, state)) continue;
 
-        const distToRival = rivalHead
-          ? Math.abs(x - rivalHead.x) + Math.abs(y - rivalHead.y)
-          : 0;
+        if (rivalHead) {
+          const distToRival = Math.abs(x - rivalHead.x) + Math.abs(y - rivalHead.y);
+          if (distToPlayer >= distToRival) continue;
+        }
 
-        // Only consider cells that are strictly closer to player than rival
-        if (rivalHead && distToPlayer >= distToRival) continue;
+        // Bonus for being in front of the player (dot product with direction)
+        const forwardness = (x - head.x) * dx + (y - head.y) * dy;
+        const score = forwardness * 2 - distToPlayer;
 
-        if (distToRival > bestRivalDist) {
-          bestRivalDist = distToRival;
+        if (score > bestScore) {
+          bestScore = score;
           candidates = [p];
-        } else if (distToRival === bestRivalDist) {
+        } else if (score === bestScore) {
           candidates.push(p);
         }
       }
@@ -196,7 +223,7 @@ function spawnFoodNearPlayer(state: GameState): Point {
     }
   }
 
-  // Fallback: any unoccupied cell
+  // Last resort fallback
   for (let y = 0; y < gridHeight; y++) {
     for (let x = 0; x < gridWidth; x++) {
       const p = { x, y };
