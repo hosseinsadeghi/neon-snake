@@ -107,7 +107,11 @@ function showGameOver() {
 
 // ============ Title Screen ============
 
-document.getElementById('btn-play-guest')!.addEventListener('click', async () => {
+const btnPlay = document.getElementById('btn-play-guest')!;
+const authSection = document.getElementById('auth-section')!;
+const playSvg = '<svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>';
+
+btnPlay.addEventListener('click', async () => {
   await loadProgress();
   showScreen(trackScreen);
   renderTrackSelect();
@@ -226,12 +230,28 @@ function mergeProgress(a: PlayerProgress, b: PlayerProgress): PlayerProgress {
   return merged;
 }
 
+function updateTitleScreen() {
+  if (currentUser) {
+    // Signed in: hide auth options, change button to "Play"
+    authSection.classList.add('hidden');
+    btnPlay.innerHTML = `${playSvg} Play`;
+  } else {
+    // Signed out: show auth options, change button back to "Play as Guest"
+    authSection.classList.remove('hidden');
+    btnPlay.innerHTML = `${playSvg} Play as Guest`;
+    btnGoogle.innerHTML = `${googleSvg} Continue with Google`;
+    btnApple.innerHTML = `${appleSvg} Continue with Apple`;
+  }
+}
+
 function updateUserBar() {
   if (!currentUser) {
     userBar.classList.add('hidden');
+    updateTitleScreen();
     return;
   }
   userBar.classList.remove('hidden');
+  updateTitleScreen();
   userBar.innerHTML = `
     ${currentUser.photoURL ? `<img class="user-avatar" src="${currentUser.photoURL}" alt="">` : ''}
     <span class="user-name">${currentUser.displayName || currentUser.email || 'Player'}</span>
