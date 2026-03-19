@@ -156,40 +156,44 @@ function spawnFoodNearPlayer(state: GameState): Point {
   const head = state.snake[0];
   const rivalHead = state.rivalSnake?.[0];
 
-  // Score every free cell: we want food close to the player AND far from the rival.
-  // Score = distToRival - distToPlayer (higher is better for the player).
-  // Among the best-scoring cells, pick one at random.
-  let bestScore = -Infinity;
-  let candidates: Point[] = [];
+  // Strategy: spawn food very close to the player (2-4 cells away).
+  // Among those, pick the one furthest from the rival.
+  // Expand the radius only if nothing is found nearby.
+  for (let maxDist = 4; maxDist <= Math.max(gridWidth, gridHeight); maxDist += 3) {
+    let bestRivalDist = -1;
+    let candidates: Point[] = [];
 
-  for (let y = 0; y < gridHeight; y++) {
-    for (let x = 0; x < gridWidth; x++) {
-      const p = { x, y };
-      if (isOccupied(p, state)) continue;
+    const minX = Math.max(0, head.x - maxDist);
+    const maxX = Math.min(gridWidth - 1, head.x + maxDist);
+    const minY = Math.max(0, head.y - maxDist);
+    const maxY = Math.min(gridHeight - 1, head.y + maxDist);
 
-      const distToPlayer = Math.abs(x - head.x) + Math.abs(y - head.y);
-      // Don't spawn right on top of the player (too easy / visually weird)
-      if (distToPlayer < 2) continue;
+    for (let y = minY; y <= maxY; y++) {
+      for (let x = minX; x <= maxX; x++) {
+        const p = { x, y };
+        const distToPlayer = Math.abs(x - head.x) + Math.abs(y - head.y);
+        if (distToPlayer < 2 || distToPlayer > maxDist) continue;
+        if (isOccupied(p, state)) continue;
 
-      let score: number;
-      if (rivalHead) {
-        const distToRival = Math.abs(x - rivalHead.x) + Math.abs(y - rivalHead.y);
-        score = distToRival - distToPlayer;
-      } else {
-        score = -distToPlayer;
-      }
+        const distToRival = rivalHead
+          ? Math.abs(x - rivalHead.x) + Math.abs(y - rivalHead.y)
+          : 0;
 
-      if (score > bestScore) {
-        bestScore = score;
-        candidates = [p];
-      } else if (score === bestScore) {
-        candidates.push(p);
+        // Only consider cells that are strictly closer to player than rival
+        if (rivalHead && distToPlayer >= distToRival) continue;
+
+        if (distToRival > bestRivalDist) {
+          bestRivalDist = distToRival;
+          candidates = [p];
+        } else if (distToRival === bestRivalDist) {
+          candidates.push(p);
+        }
       }
     }
-  }
 
-  if (candidates.length > 0) {
-    return candidates[Math.floor(Math.random() * candidates.length)];
+    if (candidates.length > 0) {
+      return candidates[Math.floor(Math.random() * candidates.length)];
+    }
   }
 
   // Fallback: any unoccupied cell
