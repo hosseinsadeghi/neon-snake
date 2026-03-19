@@ -127,6 +127,12 @@ function isOccupied(p: Point, state: GameState): boolean {
 
 function spawnFood(state: GameState): Point {
   const { gridWidth, gridHeight } = state.level;
+
+  // In A* track, bias food to spawn near the player so they have the advantage
+  if (state.trackId === TrackId.ASTAR && state.snake.length > 0) {
+    return spawnFoodNearPlayer(state);
+  }
+
   let attempts = 0;
   while (attempts < 1000) {
     const p = {
@@ -136,6 +142,49 @@ function spawnFood(state: GameState): Point {
     if (!isOccupied(p, state)) return p;
     attempts++;
   }
+  for (let y = 0; y < gridHeight; y++) {
+    for (let x = 0; x < gridWidth; x++) {
+      const p = { x, y };
+      if (!isOccupied(p, state)) return p;
+    }
+  }
+  return { x: 1, y: 1 };
+}
+
+function spawnFoodNearPlayer(state: GameState): Point {
+  const { gridWidth, gridHeight } = state.level;
+  const head = state.snake[0];
+  const rivalHead = state.rivalSnake?.[0];
+
+  // Collect valid candidates within a radius around the player's head
+  // Start with a small radius and expand if needed
+  for (let radius = 3; radius <= Math.max(gridWidth, gridHeight); radius += 2) {
+    const candidates: Point[] = [];
+    const minX = Math.max(0, head.x - radius);
+    const maxX = Math.min(gridWidth - 1, head.x + radius);
+    const minY = Math.max(0, head.y - radius);
+    const maxY = Math.min(gridHeight - 1, head.y + radius);
+
+    for (let y = minY; y <= maxY; y++) {
+      for (let x = minX; x <= maxX; x++) {
+        const p = { x, y };
+        if (isOccupied(p, state)) continue;
+        // Ensure the cell is closer to player than to rival
+        if (rivalHead) {
+          const distToPlayer = Math.abs(x - head.x) + Math.abs(y - head.y);
+          const distToRival = Math.abs(x - rivalHead.x) + Math.abs(y - rivalHead.y);
+          if (distToPlayer >= distToRival) continue;
+        }
+        candidates.push(p);
+      }
+    }
+
+    if (candidates.length > 0) {
+      return candidates[Math.floor(Math.random() * candidates.length)];
+    }
+  }
+
+  // Fallback: any unoccupied cell
   for (let y = 0; y < gridHeight; y++) {
     for (let x = 0; x < gridWidth; x++) {
       const p = { x, y };
