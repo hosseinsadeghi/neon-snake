@@ -1,3 +1,4 @@
+/// <reference types="vitest" />
 import { defineConfig } from 'vite';
 
 export default defineConfig({
@@ -5,5 +6,10 @@ export default defineConfig({
   build: {
     outDir: 'dist',
     target: 'es2020',
+  },
+  test: {
+    environment: 'jsdom',
+    include: ['src/**/*.test.ts'],
+    globals: true,
   },
 });

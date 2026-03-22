@@ -1,7 +1,9 @@
-name: Deploy to GitHub Pages
+name: CI/CD - Test, Build & Deploy
 
 on:
   push:
+    branches: [master]
+  pull_request:
     branches: [master]
 
 permissions:
@@ -14,7 +16,24 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - run: npm ci
+      - run: npm test
+
   build-and-deploy:
+    name: Build & Deploy
+    needs: test
+    if: github.ref == 'refs/heads/master' && github.event_name == 'push'
     runs-on: ubuntu-latest
     environment:
       name: github-pages

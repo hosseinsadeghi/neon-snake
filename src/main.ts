@@ -1,7 +1,7 @@
 import './style.css';
 import { Action, GamePhase, GameState, PlayerProgress, TrackDef, TrackId } from './core/types';
 import { createInitialState, applyAction, tick, GameEvent } from './core/game-engine';
-import { ALL_TRACKS } from './core/levels/index';
+import { ALL_TRACKS, TRACK_GROUPS } from './core/levels/index';
 import { generateLevel, generateEndlessLevel } from './core/procedural';
 import { Renderer } from './render/renderer';
 import { InputManager } from './input/input-manager';
@@ -271,47 +271,86 @@ function updateUserBar() {
 
 const trackGrid = document.getElementById('track-grid')!;
 
+function getTrackProgressText(track: typeof ALL_TRACKS[0]): string {
+  const tp = progress.tracks[track.id] || { highestLevelUnlocked: 1, levelScores: {}, levelStars: {} };
+  const totalStars = Object.values(tp.levelStars).reduce((a, b) => a + b, 0);
+
+  if (track.id === TrackId.INFINITE) {
+    const levelsPlayed = Object.keys(tp.levelScores).length;
+    if (levelsPlayed === 0) return 'Not started';
+    return `${totalStars} \u2605 \u00B7 Level ${tp.highestLevelUnlocked} reached`;
+  }
+  if (track.id === TrackId.ENDLESS) {
+    const bestScore = Object.values(tp.levelScores).reduce((a, b) => Math.max(a, b), 0);
+    if (bestScore === 0) return 'Not started';
+    return `Best: ${bestScore} pts`;
+  }
+  if (track.id === TrackId.MULTIPLAYER) {
+    const gamesPlayed = Object.keys(tp.levelScores).length;
+    if (gamesPlayed === 0) return 'P1: WASD \u00B7 P2: Arrows';
+    return `${gamesPlayed} games played`;
+  }
+
+  const maxStars = track.levels.length * 3;
+  if (totalStars === 0) return `${track.levels.length} levels`;
+  return `${totalStars}/${maxStars} \u2605 \u00B7 ${track.levels.length} levels`;
+}
+
 function renderTrackSelect() {
   trackGrid.innerHTML = '';
-  // Filter out tracks not ready for release
-  const visibleTracks = devMode ? ALL_TRACKS : ALL_TRACKS.filter(t => t.id !== TrackId.MULTIPLAYER);
-  for (let i = 0; i < visibleTracks.length; i++) {
-    const track = visibleTracks[i];
-    const tp = progress.tracks[track.id] || { highestLevelUnlocked: 1, levelScores: {}, levelStars: {} };
-    const totalStars = Object.values(tp.levelStars).reduce((a, b) => a + b, 0);
-    const maxStars = track.levels.length * 3;
+  const hideMultiplayer = !devMode;
+  let animIndex = 0;
 
-    const card = document.createElement('div');
-    card.className = 'track-card';
-    card.style.animationDelay = `${i * 0.08}s`;
-    card.innerHTML = `
-      <div class="track-icon">${track.icon}</div>
-      <div class="track-name" style="color: ${track.color}">${track.name}</div>
-      <div class="track-desc">${track.description}</div>
-      <div class="track-progress-bar">${totalStars}/${maxStars} \u2605 &bull; ${track.levels.length} levels</div>
-      ${track.id === TrackId.MULTIPLAYER ? '<div class="track-controls-hint">P1: WASD &bull; P2: Arrows</div>' : ''}
-    `;
+  for (const group of TRACK_GROUPS) {
+    const groupTracks = hideMultiplayer
+      ? group.tracks.filter(t => t.id !== TrackId.MULTIPLAYER)
+      : group.tracks;
+    if (groupTracks.length === 0) continue;
 
-    card.addEventListener('mouseenter', () => {
-      card.style.borderColor = track.color;
-      card.style.boxShadow = `0 0 20px ${track.color}40`;
-    });
-    card.addEventListener('mouseleave', () => {
-      card.style.borderColor = '';
-      card.style.boxShadow = '';
-    });
-    card.addEventListener('click', () => {
-      currentTrack = track;
-      levelPage = 0; // reset pagination
-      if (track.id === TrackId.ENDLESS) {
-        startEndless();
-      } else {
-        showScreen(levelScreen);
-        renderLevelSelect();
-      }
-    });
+    const groupLabel = document.createElement('div');
+    groupLabel.className = 'track-group-label';
+    groupLabel.textContent = group.label;
+    trackGrid.appendChild(groupLabel);
 
-    trackGrid.appendChild(card);
+    for (const track of groupTracks) {
+      const card = document.createElement('div');
+      card.className = 'track-card';
+      card.style.animationDelay = `${animIndex * 0.08}s`;
+      card.dataset.color = track.color;
+
+      const progressText = getTrackProgressText(track);
+
+      card.innerHTML = `
+        <div class="track-icon">${track.icon}</div>
+        <div class="track-info">
+          <div class="track-name" style="color: ${track.color}">${track.name}</div>
+          <div class="track-desc">${track.description}</div>
+        </div>
+        <div class="track-progress-bar">${progressText}</div>
+      `;
+
+      card.addEventListener('mouseenter', () => {
+        card.style.borderColor = track.color;
+        card.style.boxShadow = `0 0 20px ${track.color}40`;
+      });
+      card.addEventListener('mouseleave', () => {
+        card.style.borderColor = '';
+        card.style.boxShadow = '';
+      });
+      card.addEventListener('click', () => {
+        currentTrack = track;
+        levelPage = 0;
+        if (track.id === TrackId.ENDLESS) {
+          startEndless();
+        } else {
+          showScreen(levelScreen);
+          renderLevelSelect();
+        }
+      });
+
+      trackGrid.appendChild(card);
+      animIndex++;
+    }
   }
 }
 

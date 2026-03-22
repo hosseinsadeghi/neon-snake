@@ -35,11 +35,19 @@ export const ALL_LEVELS = CLASSIC_LEVELS;
 const INFINITE_PLACEHOLDER: LevelDef[] = [];
 const ENDLESS_PLACEHOLDER: LevelDef[] = [generateEndlessLevel()];
 
+export type TrackCategory = 'solo' | 'ai' | 'special';
+
+export interface TrackGroup {
+  label: string;
+  category: TrackCategory;
+  tracks: TrackDef[];
+}
+
 export const ALL_TRACKS: TrackDef[] = [
   {
     id: TrackId.CLASSIC,
     name: 'CLASSIC',
-    description: 'The original snake experience. 15 levels of increasing challenge.',
+    description: '15 hand-crafted levels of increasing challenge.',
     icon: '\u{1F40D}',
     color: '#00f5ff',
     levels: CLASSIC_LEVELS,
@@ -47,7 +55,7 @@ export const ALL_TRACKS: TrackDef[] = [
   {
     id: TrackId.INFINITE,
     name: 'INFINITE',
-    description: 'Procedurally generated levels forever. New challenge every 50 levels!',
+    description: 'Procedural levels forever. New mechanics every 50 levels.',
     icon: '\u{267E}\u{FE0F}',
     color: '#00ddff',
     levels: INFINITE_PLACEHOLDER,
@@ -55,7 +63,7 @@ export const ALL_TRACKS: TrackDef[] = [
   {
     id: TrackId.ENDLESS,
     name: 'ENDLESS',
-    description: 'One life. No levels. Survive as long as you can. How far can you go?',
+    description: 'One life. Survive as long as you can.',
     icon: '\u{1F525}',
     color: '#ff4400',
     levels: ENDLESS_PLACEHOLDER,
@@ -63,7 +71,7 @@ export const ALL_TRACKS: TrackDef[] = [
   {
     id: TrackId.RIVAL,
     name: 'RIVAL',
-    description: 'Race an AI snake for food! Outsmart and outeat your opponent.',
+    description: 'Race an AI snake for food before time runs out.',
     icon: '\u{1F916}',
     color: '#ff6600',
     levels: RIVAL_LEVELS,
@@ -71,7 +79,7 @@ export const ALL_TRACKS: TrackDef[] = [
   {
     id: TrackId.PREDATOR,
     name: 'PREDATOR',
-    description: 'A smart snake hunts YOU. It uses pathfinding to chase you down!',
+    description: 'A pathfinding AI hunts you down.',
     icon: '\u{1F47E}',
     color: '#cc00ff',
     levels: PREDATOR_LEVELS,
@@ -79,7 +87,7 @@ export const ALL_TRACKS: TrackDef[] = [
   {
     id: TrackId.MULTIPLAYER,
     name: 'VERSUS',
-    description: '2 players, 1 screen. WASD vs Arrows. Last snake standing wins!',
+    description: '2 players, 1 screen. Last snake standing wins.',
     icon: '\u{1F3AE}',
     color: '#39ff14',
     levels: MULTIPLAYER_LEVELS,
@@ -87,7 +95,7 @@ export const ALL_TRACKS: TrackDef[] = [
   {
     id: TrackId.HAZARDS,
     name: 'HAZARDS',
-    description: 'Deadly traps appear and vanish. Eat fast, dodge faster!',
+    description: 'Dodge deadly traps that spawn and vanish.',
     icon: '\u{1F480}',
     color: '#ff0044',
     levels: HAZARD_LEVELS,
@@ -95,10 +103,28 @@ export const ALL_TRACKS: TrackDef[] = [
   {
     id: TrackId.ASTAR,
     name: 'A* HUNT',
-    description: 'An A* snake finds the optimal path to every food. Beat the algorithm!',
+    description: 'Beat an A* pathfinding algorithm to the food.',
     icon: '\u{1F9E0}',
     color: '#ffaa00',
     levels: ASTAR_LEVELS,
+  },
+];
+
+export const TRACK_GROUPS: TrackGroup[] = [
+  {
+    label: 'SOLO',
+    category: 'solo',
+    tracks: ALL_TRACKS.filter(t => [TrackId.CLASSIC, TrackId.INFINITE, TrackId.ENDLESS].includes(t.id)),
+  },
+  {
+    label: 'VS AI',
+    category: 'ai',
+    tracks: ALL_TRACKS.filter(t => [TrackId.RIVAL, TrackId.PREDATOR, TrackId.ASTAR].includes(t.id)),
+  },
+  {
+    label: 'SPECIAL',
+    category: 'special',
+    tracks: ALL_TRACKS.filter(t => [TrackId.HAZARDS, TrackId.MULTIPLAYER].includes(t.id)),
   },
 ];
 
