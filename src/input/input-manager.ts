@@ -5,6 +5,7 @@ export class InputManager {
   private touchStartX = 0;
   private touchStartY = 0;
   private mode: TrackId = TrackId.CLASSIC;
+  enabled = true;
 
   private onKeyDownBound = this.onKeyDown.bind(this);
   private onTouchStartBound = this.onTouchStart.bind(this);
@@ -21,6 +22,7 @@ export class InputManager {
   }
 
   private onKeyDown(e: KeyboardEvent) {
+    if (!this.enabled) return;
     const isMultiplayer = this.mode === TrackId.MULTIPLAYER;
 
     switch (e.key) {

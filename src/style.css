@@ -558,6 +558,24 @@ canvas#game-canvas {
   }
 }
 
+/* ============ Keyboard Navigation Focus ============ */
+
+.kbd-focus {
+  outline: 2px solid var(--neon-cyan) !important;
+  outline-offset: 2px;
+  box-shadow: 0 0 20px rgba(0, 245, 255, 0.3), inset 0 0 15px rgba(0, 245, 255, 0.05) !important;
+}
+
+.track-card.kbd-focus {
+  border-color: var(--neon-cyan) !important;
+  transform: translateX(4px);
+}
+
+.level-card.kbd-focus {
+  border-color: var(--neon-cyan) !important;
+  transform: translateY(-3px);
+}
+
 /* Hide screens */
 .hidden {
   display: none !important;

@@ -56,18 +56,126 @@ const gameoverScreen = document.getElementById('gameover-screen')!;
 const btnGameMenu = document.getElementById('btn-game-menu')!;
 const allScreens = [titleScreen, trackScreen, levelScreen, pauseMenu, gameoverScreen];
 
+let activeScreen: HTMLElement | null = null;
+
 function showScreen(screen: HTMLElement | null) {
   for (const s of allScreens) s.classList.add('hidden');
   if (screen) screen.classList.remove('hidden');
   const inGame = screen === null;
   btnGameMenu.classList.toggle('hidden', !inGame);
+  activeScreen = screen;
+  menuFocusIndex = 0;
+  updateMenuFocus();
+  input.enabled = (screen === null);
 }
+
+// ============ Keyboard Menu Navigation ============
+
+let menuFocusIndex = 0;
+
+function getMenuItems(): HTMLElement[] {
+  if (!activeScreen) return [];
+  if (activeScreen === trackScreen) {
+    return Array.from(trackScreen.querySelectorAll<HTMLElement>('.track-card'));
+  }
+  if (activeScreen === levelScreen) {
+    return Array.from(levelScreen.querySelectorAll<HTMLElement>('.level-card:not(.locked)'));
+  }
+  // For title, pause, gameover: return the visible buttons
+  return Array.from(activeScreen.querySelectorAll<HTMLElement>('.btn:not(.btn-back)'));
+}
+
+function updateMenuFocus() {
+  // Remove all existing focus highlights
+  document.querySelectorAll('.kbd-focus').forEach(el => el.classList.remove('kbd-focus'));
+  const items = getMenuItems();
+  if (items.length === 0) return;
+  if (menuFocusIndex < 0) menuFocusIndex = 0;
+  if (menuFocusIndex >= items.length) menuFocusIndex = items.length - 1;
+  items[menuFocusIndex].classList.add('kbd-focus');
+  items[menuFocusIndex].scrollIntoView({ block: 'nearest' });
+}
+
+window.addEventListener('keydown', (e) => {
+  if (!activeScreen) return;
+
+  // Pause menu: Escape resumes
+  if (activeScreen === pauseMenu && (e.key === 'Escape' || e.key === 'p' || e.key === 'P')) {
+    e.preventDefault();
+    hidePauseMenu();
+    return;
+  }
+
+  // Game over screen: Escape goes to level select
+  if (activeScreen === gameoverScreen && e.key === 'Escape') {
+    e.preventDefault();
+    document.getElementById('btn-gameover-levels')!.click();
+    return;
+  }
+
+  // Track select: Escape goes back
+  if (activeScreen === trackScreen && e.key === 'Escape') {
+    e.preventDefault();
+    showScreen(titleScreen);
+    return;
+  }
+
+  // Level select: Escape goes back
+  if (activeScreen === levelScreen && e.key === 'Escape') {
+    e.preventDefault();
+    showScreen(trackScreen);
+    renderTrackSelect();
+    return;
+  }
+
+  const items = getMenuItems();
+  if (items.length === 0) return;
+
+  const isGrid = activeScreen === levelScreen;
+  const cols = isGrid ? 5 : 1;
+
+  switch (e.key) {
+    case 'ArrowUp':
+      e.preventDefault();
+      menuFocusIndex = Math.max(0, menuFocusIndex - cols);
+      updateMenuFocus();
+      break;
+    case 'ArrowDown':
+      e.preventDefault();
+      menuFocusIndex = Math.min(items.length - 1, menuFocusIndex + cols);
+      updateMenuFocus();
+      break;
+    case 'ArrowLeft':
+      if (isGrid) {
+        e.preventDefault();
+        menuFocusIndex = Math.max(0, menuFocusIndex - 1);
+        updateMenuFocus();
+      }
+      break;
+    case 'ArrowRight':
+      if (isGrid) {
+        e.preventDefault();
+        menuFocusIndex = Math.min(items.length - 1, menuFocusIndex + 1);
+        updateMenuFocus();
+      }
+      break;
+    case 'Enter':
+    case ' ':
+      e.preventDefault();
+      items[menuFocusIndex]?.click();
+      break;
+  }
+});
 
 function showPauseMenu() {
   if (!gameState) return;
   gameState = applyAction(gameState, Action.PAUSE);
   pauseMenu.classList.remove('hidden');
   btnGameMenu.classList.add('hidden');
+  activeScreen = pauseMenu;
+  menuFocusIndex = 0;
+  updateMenuFocus();
+  input.enabled = false;
   const info = document.getElementById('pause-level-info')!;
   const trackLabel = currentTrack ? currentTrack.name : '';
   info.textContent = `${trackLabel} - Level ${gameState.level.id}: ${gameState.level.name}  |  Score: ${gameState.score}  |  ${gameState.foodEaten}/${gameState.level.foodToWin} food`;
@@ -80,6 +188,8 @@ function hidePauseMenu() {
   }
   pauseMenu.classList.add('hidden');
   btnGameMenu.classList.remove('hidden');
+  activeScreen = null;
+  input.enabled = true;
 }
 
 const GAMEOVER_MESSAGES = [
@@ -103,6 +213,10 @@ function showGameOver() {
   msg.textContent = GAMEOVER_MESSAGES[Math.floor(Math.random() * GAMEOVER_MESSAGES.length)];
   gameoverScreen.classList.remove('hidden');
   btnGameMenu.classList.add('hidden');
+  activeScreen = gameoverScreen;
+  menuFocusIndex = 0;
+  updateMenuFocus();
+  input.enabled = false;
 }
 
 // ============ Title Screen ============

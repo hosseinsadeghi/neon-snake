@@ -335,3 +335,148 @@ describe('InputManager', () => {
     expect(action).toBe(4);
   });
 });
+
+// ==================== Keyboard Menu Navigation ====================
+
+describe('Keyboard menu navigation', () => {
+  let dom: JSDOM;
+  let document: Document;
+  let activeScreen: HTMLElement | null;
+  let menuFocusIndex: number;
+
+  function getMenuItems(): HTMLElement[] {
+    if (!activeScreen) return [];
+    if (activeScreen.id === 'track-screen') {
+      return Array.from(activeScreen.querySelectorAll<HTMLElement>('.track-card'));
+    }
+    if (activeScreen.id === 'level-screen') {
+      return Array.from(activeScreen.querySelectorAll<HTMLElement>('.level-card:not(.locked)'));
+    }
+    return Array.from(activeScreen.querySelectorAll<HTMLElement>('.btn:not(.btn-back)'));
+  }
+
+  function updateMenuFocus() {
+    document.querySelectorAll('.kbd-focus').forEach(el => el.classList.remove('kbd-focus'));
+    const items = getMenuItems();
+    if (items.length === 0) return;
+    if (menuFocusIndex < 0) menuFocusIndex = 0;
+    if (menuFocusIndex >= items.length) menuFocusIndex = items.length - 1;
+    items[menuFocusIndex].classList.add('kbd-focus');
+  }
+
+  beforeEach(() => {
+    dom = new JSDOM(`<!DOCTYPE html><html><body>
+      <div id="gameover-screen" class="screen-overlay">
+        <h2 class="gameover-title">GAME OVER</h2>
+        <p class="gameover-score">Final Score: 42</p>
+        <p class="gameover-message">RIP</p>
+        <button id="btn-retry" class="btn btn-primary">Try Again</button>
+        <button id="btn-gameover-levels" class="btn">Level Select</button>
+        <button id="btn-gameover-title" class="btn">Quit to Title</button>
+      </div>
+      <div id="pause-menu" class="screen-overlay hidden">
+        <h2 class="pause-title">PAUSED</h2>
+        <button id="btn-resume" class="btn btn-primary">Resume</button>
+        <button id="btn-restart" class="btn">Restart Level</button>
+        <button id="btn-quit-to-levels" class="btn">Level Select</button>
+        <button id="btn-quit-to-title" class="btn">Quit to Title</button>
+      </div>
+      <div id="track-screen" class="screen-overlay hidden">
+        <h2 class="track-select-title">SELECT TRACK</h2>
+        <div id="track-grid" class="track-grid">
+          <div class="track-card" data-track-id="classic">Classic</div>
+          <div class="track-card" data-track-id="infinite">Infinite</div>
+          <div class="track-card" data-track-id="endless">Endless</div>
+        </div>
+        <button id="btn-back-title-from-tracks" class="btn btn-back">Back</button>
+      </div>
+      <div id="level-screen" class="screen-overlay hidden">
+        <div id="level-grid" class="level-grid">
+          <div class="level-card">1</div>
+          <div class="level-card">2</div>
+          <div class="level-card">3</div>
+          <div class="level-card locked">4</div>
+          <div class="level-card locked">5</div>
+        </div>
+        <button id="btn-back-tracks" class="btn btn-back">Back</button>
+      </div>
+    </body></html>`, { url: 'http://localhost' });
+    document = dom.window.document;
+    activeScreen = null;
+    menuFocusIndex = 0;
+  });
+
+  it('highlights first button on game over screen', () => {
+    activeScreen = document.getElementById('gameover-screen')!;
+    menuFocusIndex = 0;
+    updateMenuFocus();
+    const retryBtn = document.getElementById('btn-retry')!;
+    expect(retryBtn.classList.contains('kbd-focus')).toBe(true);
+  });
+
+  it('moves focus down with ArrowDown on game over', () => {
+    activeScreen = document.getElementById('gameover-screen')!;
+    menuFocusIndex = 0;
+    updateMenuFocus();
+    // Simulate ArrowDown
+    menuFocusIndex = Math.min(getMenuItems().length - 1, menuFocusIndex + 1);
+    updateMenuFocus();
+    const items = getMenuItems();
+    expect(items[1].classList.contains('kbd-focus')).toBe(true);
+    expect(items[0].classList.contains('kbd-focus')).toBe(false);
+  });
+
+  it('clamps focus index to valid range', () => {
+    activeScreen = document.getElementById('gameover-screen')!;
+    menuFocusIndex = 99;
+    updateMenuFocus();
+    const items = getMenuItems();
+    expect(items[items.length - 1].classList.contains('kbd-focus')).toBe(true);
+  });
+
+  it('highlights first button on pause menu', () => {
+    activeScreen = document.getElementById('pause-menu')!;
+    menuFocusIndex = 0;
+    updateMenuFocus();
+    const resumeBtn = document.getElementById('btn-resume')!;
+    expect(resumeBtn.classList.contains('kbd-focus')).toBe(true);
+  });
+
+  it('navigates track cards with ArrowDown', () => {
+    activeScreen = document.getElementById('track-screen')!;
+    menuFocusIndex = 0;
+    updateMenuFocus();
+    const items = getMenuItems();
+    expect(items[0].classList.contains('kbd-focus')).toBe(true);
+
+    menuFocusIndex = 1;
+    updateMenuFocus();
+    expect(items[1].classList.contains('kbd-focus')).toBe(true);
+    expect(items[0].classList.contains('kbd-focus')).toBe(false);
+  });
+
+  it('navigates unlocked level cards (skips locked)', () => {
+    activeScreen = document.getElementById('level-screen')!;
+    menuFocusIndex = 0;
+    updateMenuFocus();
+    const items = getMenuItems();
+    // Should only have 3 unlocked cards
+    expect(items.length).toBe(3);
+    expect(items[0].classList.contains('kbd-focus')).toBe(true);
+  });
+
+  it('back button is excluded from menu items (has btn-back class)', () => {
+    activeScreen = document.getElementById('track-screen')!;
+    const items = getMenuItems();
+    const backBtn = document.getElementById('btn-back-title-from-tracks')!;
+    expect(items).not.toContain(backBtn);
+  });
+
+  it('does not highlight anything when no active screen', () => {
+    activeScreen = null;
+    menuFocusIndex = 0;
+    updateMenuFocus();
+    const focused = document.querySelectorAll('.kbd-focus');
+    expect(focused.length).toBe(0);
+  });
+});
