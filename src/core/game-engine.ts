@@ -133,11 +133,6 @@ function isOccupied(p: Point, state: GameState): boolean {
 function spawnFood(state: GameState): Point {
   const { gridWidth, gridHeight } = state.level;
 
-  // In A* track, bias food to spawn near the player so they have the advantage
-  if (state.trackId === TrackId.ASTAR && state.snake.length > 0) {
-    return spawnFoodNearPlayer(state);
-  }
-
   let attempts = 0;
   while (attempts < 1000) {
     const p = {
@@ -147,88 +142,6 @@ function spawnFood(state: GameState): Point {
     if (!isOccupied(p, state)) return p;
     attempts++;
   }
-  for (let y = 0; y < gridHeight; y++) {
-    for (let x = 0; x < gridWidth; x++) {
-      const p = { x, y };
-      if (!isOccupied(p, state)) return p;
-    }
-  }
-  return { x: 1, y: 1 };
-}
-
-function spawnFoodNearPlayer(state: GameState): Point {
-  const { gridWidth, gridHeight } = state.level;
-  const head = state.snake[0];
-  const rivalHead = state.rivalSnake?.[0];
-
-  // Direction vector the player is currently moving
-  const dir = state.direction;
-  const dx = dir === Direction.RIGHT ? 1 : dir === Direction.LEFT ? -1 : 0;
-  const dy = dir === Direction.DOWN ? 1 : dir === Direction.UP ? -1 : 0;
-
-  // Try to place food directly ahead of the player (2-5 cells in front).
-  // This means the player just keeps moving straight to eat it.
-  for (let dist = 3; dist <= 6; dist++) {
-    const p = { x: head.x + dx * dist, y: head.y + dy * dist };
-    if (p.x >= 0 && p.x < gridWidth && p.y >= 0 && p.y < gridHeight && !isOccupied(p, state)) {
-      return p;
-    }
-  }
-
-  // If straight ahead is blocked, try slightly off-axis (1 cell to the side)
-  for (let dist = 3; dist <= 6; dist++) {
-    for (const offset of [-1, 1]) {
-      const p = {
-        x: head.x + dx * dist + (dy !== 0 ? offset : 0),
-        y: head.y + dy * dist + (dx !== 0 ? offset : 0),
-      };
-      if (p.x >= 0 && p.x < gridWidth && p.y >= 0 && p.y < gridHeight && !isOccupied(p, state)) {
-        return p;
-      }
-    }
-  }
-
-  // Wider fallback: nearby cells, prefer those in front and closer to player than rival
-  for (let maxDist = 4; maxDist <= Math.max(gridWidth, gridHeight); maxDist += 3) {
-    let bestScore = -Infinity;
-    let candidates: Point[] = [];
-
-    const minX = Math.max(0, head.x - maxDist);
-    const maxX = Math.min(gridWidth - 1, head.x + maxDist);
-    const minY = Math.max(0, head.y - maxDist);
-    const maxY = Math.min(gridHeight - 1, head.y + maxDist);
-
-    for (let y = minY; y <= maxY; y++) {
-      for (let x = minX; x <= maxX; x++) {
-        const p = { x, y };
-        const distToPlayer = Math.abs(x - head.x) + Math.abs(y - head.y);
-        if (distToPlayer < 2 || distToPlayer > maxDist) continue;
-        if (isOccupied(p, state)) continue;
-
-        if (rivalHead) {
-          const distToRival = Math.abs(x - rivalHead.x) + Math.abs(y - rivalHead.y);
-          if (distToPlayer >= distToRival) continue;
-        }
-
-        // Bonus for being in front of the player (dot product with direction)
-        const forwardness = (x - head.x) * dx + (y - head.y) * dy;
-        const score = forwardness * 2 - distToPlayer;
-
-        if (score > bestScore) {
-          bestScore = score;
-          candidates = [p];
-        } else if (score === bestScore) {
-          candidates.push(p);
-        }
-      }
-    }
-
-    if (candidates.length > 0) {
-      return candidates[Math.floor(Math.random() * candidates.length)];
-    }
-  }
-
-  // Last resort fallback
   for (let y = 0; y < gridHeight; y++) {
     for (let x = 0; x < gridWidth; x++) {
       const p = { x, y };
