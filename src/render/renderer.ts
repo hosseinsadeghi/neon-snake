@@ -233,7 +233,9 @@ export class Renderer {
     this.drawHUD(state, rect.width);
 
     // Phase overlays (pause is handled by DOM menu now)
-    if (state.phase === GamePhase.DYING) {
+    if (state.phase === GamePhase.COUNTDOWN) {
+      this.drawCountdownOverlay(state, rect);
+    } else if (state.phase === GamePhase.DYING) {
       this.drawDeathOverlay(state, rect);
     } else if (state.phase === GamePhase.LEVEL_COMPLETE) {
       this.drawLevelCompleteOverlay(state, rect);
@@ -788,6 +790,58 @@ export class Renderer {
       ctx.fillText(`COMBO x${state.combo}`, width / 2, 52);
       ctx.shadowBlur = 0;
     }
+  }
+
+  private drawCountdownOverlay(state: GameState, rect: DOMRect) {
+    const ctx = this.ctx;
+    const total = 3000;
+    const remaining = state.countdownTimer;
+    const elapsed = total - remaining;
+
+    // Dim overlay
+    const dimAlpha = Math.min(elapsed / 300, 0.5);
+    ctx.fillStyle = `rgba(0, 0, 0, ${dimAlpha})`;
+    ctx.fillRect(0, 0, rect.width, rect.height);
+
+    const cx = rect.width / 2;
+    const cy = rect.height / 2;
+
+    // Which number to show: 3, 2, 1, or "GO!"
+    const secondsLeft = Math.ceil(remaining / 1000);
+    const text = secondsLeft > 0 ? String(secondsLeft) : 'GO!';
+
+    // Pulse animation within each second
+    const withinSecond = remaining % 1000;
+    const pulse = withinSecond / 1000; // 1 at start of second, 0 at end
+    const scale = 1 + pulse * 0.4;
+
+    // Color transitions: 3=cyan, 2=yellow, 1=pink, GO=green
+    const colors: Record<string, string> = { '3': NEON_CYAN, '2': NEON_YELLOW, '1': NEON_PINK, 'GO!': NEON_GREEN };
+    const color = colors[text] || NEON_CYAN;
+
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.scale(scale, scale);
+
+    // Glow
+    ctx.shadowColor = color;
+    ctx.shadowBlur = 30 + pulse * 20;
+
+    ctx.fillStyle = color;
+    ctx.font = `bold ${text === 'GO!' ? 64 : 80}px "Segoe UI", system-ui, sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.globalAlpha = Math.min(1, 0.5 + pulse * 0.5);
+    ctx.fillText(text, 0, 0);
+
+    // Level name below
+    ctx.globalAlpha = 0.7;
+    ctx.shadowBlur = 0;
+    ctx.fillStyle = '#ffffff';
+    ctx.font = '16px "Segoe UI", system-ui, sans-serif';
+    ctx.fillText(state.level.name, 0, 55);
+
+    ctx.restore();
   }
 
   private drawDeathOverlay(state: GameState, rect: DOMRect) {

@@ -664,19 +664,21 @@ function gameLoop(timestamp: number) {
 
   if (gameState) {
     const actions = input.drain();
-    for (const action of actions) {
-      if (action === Action.PAUSE) {
-        if (gameState.phase === GamePhase.PLAYING) {
-          showPauseMenu();
-        } else if (gameState.phase === GamePhase.PAUSED) {
-          hidePauseMenu();
+    if (gameState.phase !== GamePhase.COUNTDOWN) {
+      for (const action of actions) {
+        if (action === Action.PAUSE) {
+          if (gameState.phase === GamePhase.PLAYING) {
+            showPauseMenu();
+          } else if (gameState.phase === GamePhase.PAUSED) {
+            hidePauseMenu();
+          }
+          continue;
         }
-        continue;
+        gameState = applyAction(gameState, action);
       }
-      gameState = applyAction(gameState, action);
     }
 
-    if (gameState.phase === GamePhase.PLAYING || gameState.phase === GamePhase.DYING || gameState.phase === GamePhase.LEVEL_COMPLETE) {
+    if (gameState.phase === GamePhase.COUNTDOWN || gameState.phase === GamePhase.PLAYING || gameState.phase === GamePhase.DYING || gameState.phase === GamePhase.LEVEL_COMPLETE) {
       const result = tick(gameState, dt);
       gameState = result.state;
       handleEvents(result.events);

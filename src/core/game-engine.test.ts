@@ -38,6 +38,11 @@ function makeWalledLevel(overrides: Partial<LevelDef> = {}): LevelDef {
   return makeLevel({ walls, ...overrides });
 }
 
+/** Skip countdown phase so tests start in PLAYING */
+function skipCountdown(state: GameState): GameState {
+  return { ...state, phase: GamePhase.PLAYING, countdownTimer: 0 };
+}
+
 function tickUntilMoved(state: GameState, maxTicks = 50): GameState {
   let s = state;
   for (let i = 0; i < maxTicks; i++) {
@@ -55,7 +60,8 @@ describe('createInitialState', () => {
     const level = makeLevel();
     const state = createInitialState(level, 0, 3, 0, TrackId.CLASSIC);
 
-    expect(state.phase).toBe(GamePhase.PLAYING);
+    expect(state.phase).toBe(GamePhase.COUNTDOWN);
+    expect(state.countdownTimer).toBe(3000);
     expect(state.trackId).toBe(TrackId.CLASSIC);
     expect(state.lives).toBe(3);
     expect(state.score).toBe(0);
@@ -136,13 +142,46 @@ describe('createInitialState', () => {
   });
 });
 
+// ==================== Countdown ====================
+
+describe('countdown', () => {
+  it('starts in COUNTDOWN phase with 3 second timer', () => {
+    const state = createInitialState(makeLevel(), 0, 3, 0, TrackId.CLASSIC);
+    expect(state.phase).toBe(GamePhase.COUNTDOWN);
+    expect(state.countdownTimer).toBe(3000);
+  });
+
+  it('counts down and transitions to PLAYING', () => {
+    const state = createInitialState(makeLevel(), 0, 3, 0, TrackId.CLASSIC);
+
+    // Tick 1 second
+    let result = tick(state, 1000);
+    expect(result.state.phase).toBe(GamePhase.COUNTDOWN);
+    expect(result.state.countdownTimer).toBe(2000);
+
+    // Tick remaining 2 seconds
+    result = tick(result.state, 2000);
+    expect(result.state.phase).toBe(GamePhase.PLAYING);
+    expect(result.state.countdownTimer).toBe(0);
+  });
+
+  it('does not move snake during countdown', () => {
+    const state = createInitialState(makeLevel(), 0, 3, 0, TrackId.CLASSIC);
+    const headBefore = { ...state.snake[state.snake.length - 1] };
+
+    const result = tick(state, 1000);
+    const headAfter = result.state.snake[result.state.snake.length - 1];
+    expect(headAfter).toEqual(headBefore);
+  });
+});
+
 // ==================== Direction Actions ====================
 
 describe('applyAction', () => {
   let state: GameState;
 
   beforeEach(() => {
-    state = createInitialState(makeLevel(), 0, 3, 0, TrackId.CLASSIC);
+    state = skipCountdown(createInitialState(makeLevel(), 0, 3, 0, TrackId.CLASSIC));
   });
 
   it('queues a valid direction change', () => {
@@ -190,7 +229,7 @@ describe('applyAction', () => {
       player2Start: { x: 5, y: 5 },
       player2StartDir: Direction.LEFT,
     });
-    let s = createInitialState(level, 0, 3, 0, TrackId.MULTIPLAYER);
+    let s = skipCountdown(createInitialState(level, 0, 3, 0, TrackId.MULTIPLAYER));
     s = applyAction(s, Action.P2_UP);
     expect(s.p2DirectionQueue).toContain(Direction.UP);
   });
@@ -200,7 +239,7 @@ describe('applyAction', () => {
 
 describe('tick - movement', () => {
   it('moves snake forward one cell per game tick', () => {
-    const state = createInitialState(makeLevel(), 0, 3, 0, TrackId.CLASSIC);
+    const state = skipCountdown(createInitialState(makeLevel(), 0, 3, 0, TrackId.CLASSIC));
     const headBefore = state.snake[state.snake.length - 1];
 
     // Tick enough time for one game tick
@@ -214,7 +253,7 @@ describe('tick - movement', () => {
 
   it('wraps around edges when no walls', () => {
     const level = makeLevel({ walls: [], snakeStart: { x: 19, y: 10 } });
-    const state = createInitialState(level, 0, 3, 0, TrackId.CLASSIC);
+    const state = skipCountdown(createInitialState(level, 0, 3, 0, TrackId.CLASSIC));
 
     const result = tick(state, state.currentSpeed);
     const head = result.state.snake[result.state.snake.length - 1];
@@ -224,7 +263,7 @@ describe('tick - movement', () => {
   });
 
   it('changes direction from the queue', () => {
-    const state = createInitialState(makeLevel(), 0, 3, 0, TrackId.CLASSIC);
+    const state = skipCountdown(createInitialState(makeLevel(), 0, 3, 0, TrackId.CLASSIC));
     const withDir = applyAction(state, Action.UP);
 
     const result = tick(withDir, withDir.currentSpeed);
@@ -239,7 +278,7 @@ describe('tick - movement', () => {
 describe('tick - collision', () => {
   it('dies when hitting a wall', () => {
     const level = makeWalledLevel({ snakeStart: { x: 1, y: 1 }, snakeStartDir: Direction.UP });
-    const state = createInitialState(level, 0, 3, 0, TrackId.CLASSIC);
+    const state = skipCountdown(createInitialState(level, 0, 3, 0, TrackId.CLASSIC));
 
     // Move up into the top wall (y=0)
     const result = tick(state, state.currentSpeed);
@@ -251,7 +290,7 @@ describe('tick - collision', () => {
     // Make a snake that immediately hits itself
     // Start going RIGHT, then queue UP, LEFT, DOWN to loop into itself
     const level = makeLevel({ snakeStart: { x: 10, y: 10 } });
-    let state = createInitialState(level, 0, 3, 0, TrackId.CLASSIC);
+    let state = skipCountdown(createInitialState(level, 0, 3, 0, TrackId.CLASSIC));
 
     // Need a longer snake to self-collide. Let's force a scenario:
     // Build state manually with a looping snake
@@ -278,21 +317,21 @@ describe('tick - collision', () => {
 
   it('enters DYING phase on death and respawns with one fewer life', () => {
     const level = makeWalledLevel({ snakeStart: { x: 1, y: 1 }, snakeStartDir: Direction.UP });
-    let state = createInitialState(level, 0, 3, 0, TrackId.CLASSIC);
+    let state = skipCountdown(createInitialState(level, 0, 3, 0, TrackId.CLASSIC));
 
     // Tick to hit wall
     let result = tick(state, state.currentSpeed);
     expect(result.state.phase).toBe(GamePhase.DYING);
 
-    // Tick through death timer
+    // Tick through death timer — respawn goes to COUNTDOWN
     result = tick(result.state, 2000);
-    expect(result.state.phase).toBe(GamePhase.PLAYING);
+    expect(result.state.phase).toBe(GamePhase.COUNTDOWN);
     expect(result.state.lives).toBe(2);
   });
 
   it('game over when no lives remaining', () => {
     const level = makeWalledLevel({ snakeStart: { x: 1, y: 1 }, snakeStartDir: Direction.UP });
-    let state = createInitialState(level, 0, 1, 0, TrackId.CLASSIC);
+    let state = skipCountdown(createInitialState(level, 0, 1, 0, TrackId.CLASSIC));
 
     // Hit wall with 1 life
     let result = tick(state, state.currentSpeed);
@@ -310,7 +349,7 @@ describe('tick - collision', () => {
 describe('tick - food eating', () => {
   it('grows snake and increments score when eating food', () => {
     const level = makeLevel({ snakeStart: { x: 5, y: 10 } });
-    let state = createInitialState(level, 0, 3, 0, TrackId.CLASSIC);
+    let state = skipCountdown(createInitialState(level, 0, 3, 0, TrackId.CLASSIC));
 
     // Place food directly ahead
     state = { ...state, food: { x: 6, y: 10 } };
@@ -325,7 +364,7 @@ describe('tick - food eating', () => {
 
   it('spawns new food after eating', () => {
     const level = makeLevel({ snakeStart: { x: 5, y: 10 } });
-    let state = createInitialState(level, 0, 3, 0, TrackId.CLASSIC);
+    let state = skipCountdown(createInitialState(level, 0, 3, 0, TrackId.CLASSIC));
     state = { ...state, food: { x: 6, y: 10 } };
 
     const result = tick(state, state.currentSpeed);
@@ -336,7 +375,7 @@ describe('tick - food eating', () => {
 
   it('increases speed after eating', () => {
     const level = makeLevel({ snakeStart: { x: 5, y: 10 }, speedIncrement: 10 });
-    let state = createInitialState(level, 0, 3, 0, TrackId.CLASSIC);
+    let state = skipCountdown(createInitialState(level, 0, 3, 0, TrackId.CLASSIC));
     state = { ...state, food: { x: 6, y: 10 } };
 
     const speedBefore = state.currentSpeed;
@@ -346,7 +385,7 @@ describe('tick - food eating', () => {
 
   it('does not go below minimum speed (50ms)', () => {
     const level = makeLevel({ snakeStart: { x: 5, y: 10 }, initialSpeed: 55, speedIncrement: 20 });
-    let state = createInitialState(level, 0, 3, 0, TrackId.CLASSIC);
+    let state = skipCountdown(createInitialState(level, 0, 3, 0, TrackId.CLASSIC));
     state = { ...state, food: { x: 6, y: 10 } };
 
     const result = tick(state, state.currentSpeed);
@@ -355,7 +394,7 @@ describe('tick - food eating', () => {
 
   it('combo increases score multiplier', () => {
     const level = makeLevel({ snakeStart: { x: 5, y: 10 } });
-    let state = createInitialState(level, 0, 3, 0, TrackId.CLASSIC);
+    let state = skipCountdown(createInitialState(level, 0, 3, 0, TrackId.CLASSIC));
     state = { ...state, food: { x: 6, y: 10 }, combo: 2, comboTimer: 3000 };
 
     const result = tick(state, state.currentSpeed);
@@ -369,7 +408,7 @@ describe('tick - food eating', () => {
 describe('tick - level completion', () => {
   it('completes the level when foodToWin is reached', () => {
     const level = makeLevel({ snakeStart: { x: 5, y: 10 }, foodToWin: 1 });
-    let state = createInitialState(level, 0, 3, 0, TrackId.CLASSIC);
+    let state = skipCountdown(createInitialState(level, 0, 3, 0, TrackId.CLASSIC));
     state = { ...state, food: { x: 6, y: 10 } };
 
     const result = tick(state, state.currentSpeed);
@@ -379,7 +418,7 @@ describe('tick - level completion', () => {
 
   it('transitions to LEVEL_SELECT after completion timer expires', () => {
     const level = makeLevel({ snakeStart: { x: 5, y: 10 }, foodToWin: 1 });
-    let state = createInitialState(level, 0, 3, 0, TrackId.CLASSIC);
+    let state = skipCountdown(createInitialState(level, 0, 3, 0, TrackId.CLASSIC));
     state = { ...state, food: { x: 6, y: 10 } };
 
     let result = tick(state, state.currentSpeed);
@@ -400,7 +439,7 @@ describe('tick - portals', () => {
       snakeStartDir: Direction.RIGHT,
       portalPairs: [[{ x: 6, y: 10 }, { x: 15, y: 10 }]],
     });
-    let state = createInitialState(level, 0, 3, 0, TrackId.CLASSIC);
+    let state = skipCountdown(createInitialState(level, 0, 3, 0, TrackId.CLASSIC));
 
     const result = tick(state, state.currentSpeed);
     const head = result.state.snake[result.state.snake.length - 1];
@@ -417,7 +456,7 @@ describe('tick - portals', () => {
 describe('tick - combo system', () => {
   it('resets combo when timer expires', () => {
     const level = makeLevel();
-    let state = createInitialState(level, 0, 3, 0, TrackId.CLASSIC);
+    let state = skipCountdown(createInitialState(level, 0, 3, 0, TrackId.CLASSIC));
     state = { ...state, combo: 3, comboTimer: 100 };
 
     // Tick past combo timer
@@ -428,7 +467,7 @@ describe('tick - combo system', () => {
 
   it('maintains combo within timer window', () => {
     const level = makeLevel();
-    let state = createInitialState(level, 0, 3, 0, TrackId.CLASSIC);
+    let state = skipCountdown(createInitialState(level, 0, 3, 0, TrackId.CLASSIC));
     state = { ...state, combo: 2, comboTimer: 3000 };
 
     // Tick less than combo timer (just one game tick)
@@ -443,7 +482,7 @@ describe('tick - combo system', () => {
 describe('tick - paused', () => {
   it('does nothing when paused', () => {
     const level = makeLevel();
-    let state = createInitialState(level, 0, 3, 0, TrackId.CLASSIC);
+    let state = skipCountdown(createInitialState(level, 0, 3, 0, TrackId.CLASSIC));
     state = applyAction(state, Action.PAUSE);
 
     const headBefore = [...state.snake];
@@ -459,7 +498,7 @@ describe('tick - paused', () => {
 describe('hazards', () => {
   it('does not kill during warning phase', () => {
     const level = makeLevel({ snakeStart: { x: 5, y: 10 } });
-    let state = createInitialState(level, 0, 3, 0, TrackId.HAZARDS);
+    let state = skipCountdown(createInitialState(level, 0, 3, 0, TrackId.HAZARDS));
     state = {
       ...state,
       hazards: [{
@@ -477,7 +516,7 @@ describe('hazards', () => {
 
   it('kills when hitting active hazard', () => {
     const level = makeLevel({ snakeStart: { x: 5, y: 10 } });
-    let state = createInitialState(level, 0, 3, 0, TrackId.HAZARDS);
+    let state = skipCountdown(createInitialState(level, 0, 3, 0, TrackId.HAZARDS));
     state = {
       ...state,
       hazards: [{

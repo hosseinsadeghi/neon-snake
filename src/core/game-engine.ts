@@ -21,8 +21,10 @@ export function createInitialState(
 ): GameState {
   const snake = buildSnake(level.snakeStart, level.snakeStartDir, 3);
 
+  const COUNTDOWN_DURATION = 3000; // 3 seconds
+
   const state: GameState = {
-    phase: GamePhase.PLAYING,
+    phase: GamePhase.COUNTDOWN,
     trackId,
     level,
     levelIndex,
@@ -65,6 +67,9 @@ export function createInitialState(
 
     // Time
     timeRemaining: 0,
+
+    // Countdown
+    countdownTimer: COUNTDOWN_DURATION,
   };
 
   // Mode-specific init
@@ -351,6 +356,17 @@ export type GameEvent =
 
 export function tick(state: GameState, dt: number): TickResult {
   const events: GameEvent[] = [];
+
+  if (state.phase === GamePhase.COUNTDOWN) {
+    const countdownTimer = state.countdownTimer - dt;
+    if (countdownTimer <= 0) {
+      return {
+        state: { ...state, phase: GamePhase.PLAYING, countdownTimer: 0, tickAccumulator: 0 },
+        events,
+      };
+    }
+    return { state: { ...state, countdownTimer }, events };
+  }
 
   if (state.phase === GamePhase.DYING) {
     const deathTimer = state.deathTimer - dt;

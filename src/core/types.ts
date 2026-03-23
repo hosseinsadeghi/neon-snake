@@ -37,6 +37,7 @@ export enum GamePhase {
   TITLE,
   TRACK_SELECT,
   LEVEL_SELECT,
+  COUNTDOWN,
   PLAYING,
   PAUSED,
   DYING,
@@ -144,6 +145,9 @@ export interface GameState {
 
   // Time limit (for rival mode)
   timeRemaining: number; // ms, 0 = no limit
+
+  // Countdown before game starts
+  countdownTimer: number; // ms remaining in countdown (0 = no countdown)
 }
 
 export interface TrackProgress {
