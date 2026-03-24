@@ -812,6 +812,10 @@ function gameLoop(timestamp: number) {
 
     if (gameState) {
       renderer.draw(gameState, dt);
+      // Position the hamburger button to align with the top HUD panel
+      const pos = renderer.getMenuButtonPosition();
+      btnGameMenu.style.top = `${pos.y}px`;
+      btnGameMenu.style.left = `${pos.x}px`;
     }
   }
 

@@ -65,6 +65,14 @@ export class Renderer {
     return this.particles;
   }
 
+  /** Returns the top-left corner of the top HUD panel (for aligning the menu button) */
+  getMenuButtonPosition(): { x: number; y: number } {
+    return {
+      x: this.offsetX - 4 + 4,
+      y: this.offsetY - Renderer.HUD_GAP - Renderer.HUD_TOP_H + 6,
+    };
+  }
+
   clearFloatingTexts() {
     this.floatingTexts = [];
   }
@@ -77,17 +85,25 @@ export class Renderer {
     this.ctx.scale(dpr, dpr);
   }
 
+  private static readonly HUD_TOP_H = 44;    // space above grid for top panel
+  private static readonly HUD_BOTTOM_H = 36;  // space below grid for bottom panel
+  private static readonly HUD_GAP = 6;        // gap between panel and grid
+
   private computeLayout(state: GameState) {
     const rect = this.canvas.getBoundingClientRect();
+    const reservedV = Renderer.HUD_TOP_H + Renderer.HUD_BOTTOM_H + Renderer.HUD_GAP * 2 + 20;
     const maxW = rect.width - 20;
-    const maxH = rect.height - 80;
+    const maxH = rect.height - reservedV;
     const cellW = Math.floor(maxW / state.level.gridWidth);
     const cellH = Math.floor(maxH / state.level.gridHeight);
     this.cellSize = Math.min(cellW, cellH, 24);
     const gridPxW = this.cellSize * state.level.gridWidth;
     const gridPxH = this.cellSize * state.level.gridHeight;
     this.offsetX = Math.floor((rect.width - gridPxW) / 2);
-    this.offsetY = Math.floor((rect.height - gridPxH) / 2) + 20;
+    // Center the grid+panels vertically, then offset the grid below the top panel
+    const totalH = Renderer.HUD_TOP_H + Renderer.HUD_GAP + gridPxH + Renderer.HUD_GAP + Renderer.HUD_BOTTOM_H;
+    const startY = Math.floor((rect.height - totalH) / 2);
+    this.offsetY = startY + Renderer.HUD_TOP_H + Renderer.HUD_GAP;
   }
 
   private toPixel(p: Point): { x: number; y: number } {
@@ -685,120 +701,202 @@ export class Renderer {
     ctx.closePath();
   }
 
-  private drawHUD(state: GameState, width: number) {
+  // ==================== Panel helpers ====================
+
+  /** Draws a rounded-rect panel with a dark translucent fill and neon border */
+  private drawPanel(x: number, y: number, w: number, h: number, borderColor: string) {
     const ctx = this.ctx;
-
-    // Top bar
-    ctx.fillStyle = 'rgba(10, 10, 20, 0.8)';
-    ctx.fillRect(0, 0, width, 36);
-    ctx.strokeStyle = 'rgba(100, 50, 200, 0.3)';
-    ctx.lineWidth = 1;
+    const r = 6;
+    ctx.save();
     ctx.beginPath();
-    ctx.moveTo(0, 36);
-    ctx.lineTo(width, 36);
-    ctx.stroke();
+    ctx.moveTo(x + r, y);
+    ctx.lineTo(x + w - r, y);
+    ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+    ctx.lineTo(x + w, y + h - r);
+    ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+    ctx.lineTo(x + r, y + h);
+    ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+    ctx.lineTo(x, y + r);
+    ctx.quadraticCurveTo(x, y, x + r, y);
+    ctx.closePath();
 
-    ctx.font = '13px "Segoe UI", system-ui, sans-serif';
+    ctx.fillStyle = 'rgba(8, 6, 18, 0.85)';
+    ctx.fill();
+    ctx.strokeStyle = borderColor;
+    ctx.lineWidth = 1.5;
+    ctx.shadowColor = borderColor;
+    ctx.shadowBlur = 8;
+    ctx.stroke();
+    ctx.shadowBlur = 0;
+    ctx.restore();
+  }
+
+  /** Draws a small food progress bar */
+  private drawProgressBar(x: number, y: number, w: number, h: number, ratio: number, fillColor: string, glowColor: string) {
+    const ctx = this.ctx;
+    const r = h / 2;
+    const clamped = Math.min(Math.max(ratio, 0), 1);
+
+    // Background track
+    ctx.save();
+    ctx.beginPath();
+    ctx.roundRect(x, y, w, h, r);
+    ctx.fillStyle = 'rgba(255,255,255,0.08)';
+    ctx.fill();
+
+    // Fill
+    if (clamped > 0) {
+      const fw = Math.max(h, w * clamped); // min width = pill shape
+      ctx.beginPath();
+      ctx.roundRect(x, y, fw, h, r);
+      ctx.fillStyle = fillColor;
+      ctx.shadowColor = glowColor;
+      ctx.shadowBlur = 6;
+      ctx.fill();
+      ctx.shadowBlur = 0;
+    }
+    ctx.restore();
+  }
+
+  // ==================== HUD ====================
+
+  private drawHUD(state: GameState, _width: number) {
+    const ctx = this.ctx;
+    const cs = this.cellSize;
+    const gridW = state.level.gridWidth * cs;
+    const ox = this.offsetX;
+    const oy = this.offsetY;
+    const topH = Renderer.HUD_TOP_H;
+    const botH = Renderer.HUD_BOTTOM_H;
+    const gap = Renderer.HUD_GAP;
+
+    // Panel boundaries
+    const panelX = ox - 4;
+    const panelW = gridW + 8;
+    const topY = oy - gap - topH;
+    const botY = oy + state.level.gridHeight * cs + gap;
+
+    // ---- TOP PANEL ----
+    this.drawPanel(panelX, topY, panelW, topH, 'rgba(100, 50, 200, 0.45)');
+
+    const topMidY = topY + topH / 2;
     ctx.textBaseline = 'middle';
 
-    // Level name (offset for hamburger button)
+    // Level name (left, leave room for hamburger)
+    ctx.font = 'bold 13px "Segoe UI", system-ui, sans-serif';
     ctx.fillStyle = NEON_CYAN;
     ctx.shadowColor = NEON_CYAN;
     ctx.shadowBlur = 4;
     ctx.textAlign = 'left';
-    ctx.fillText(`LV.${state.level.id} ${state.level.name}`, 42, 18);
+    ctx.fillText(`LV.${state.level.id}  ${state.level.name.toUpperCase()}`, panelX + 38, topMidY);
     ctx.shadowBlur = 0;
 
-    // Mode-specific HUD
+    // Mode-specific right side of top panel
+    ctx.font = '12px "Segoe UI", system-ui, sans-serif';
+    ctx.textAlign = 'right';
+    const rx = panelX + panelW - 12;
+
     if (state.trackId === TrackId.MULTIPLAYER) {
-      // P1 info (left side)
       ctx.fillStyle = NEON_CYAN;
-      ctx.textAlign = 'center';
-      ctx.fillText(`P1: ${state.foodEaten}/${state.level.foodToWin}`, width * 0.35, 18);
-      // P2 info (right side)
+      ctx.shadowColor = NEON_CYAN;
+      ctx.shadowBlur = 4;
+      ctx.fillText(`P1: ${state.foodEaten}/${state.level.foodToWin}`, panelX + panelW / 2 - 8, topMidY);
       ctx.fillStyle = NEON_GREEN;
-      ctx.fillText(`P2: ${state.p2FoodEaten}/${state.level.foodToWin}`, width * 0.65, 18);
+      ctx.shadowColor = NEON_GREEN;
+      ctx.fillText(`P2: ${state.p2FoodEaten}/${state.level.foodToWin}`, rx, topMidY);
+      ctx.shadowBlur = 0;
     } else if (state.trackId === TrackId.RIVAL) {
-      // Player progress
-      ctx.fillStyle = NEON_CYAN;
-      ctx.textAlign = 'center';
-      ctx.fillText(`YOU: ${state.foodEaten}/${state.level.foodToWin}`, width * 0.35, 18);
-      // Rival progress
       ctx.fillStyle = NEON_ORANGE;
-      ctx.fillText(`RIVAL: ${state.rivalFoodEaten}/${state.level.foodToWin}`, width * 0.65, 18);
+      ctx.shadowColor = NEON_ORANGE;
+      ctx.shadowBlur = 4;
+      ctx.fillText(`RIVAL  ${state.rivalFoodEaten}/${state.level.foodToWin}`, rx, topMidY);
+      ctx.shadowBlur = 0;
     } else if (state.trackId === TrackId.PREDATOR) {
-      ctx.fillStyle = '#ffffff';
-      ctx.textAlign = 'center';
-      ctx.fillText(`SCORE: ${state.score}`, width * 0.35, 18);
+      const status = state.rivalAlive ? '\u26A0 HUNTING' : '\u23F3 RESPAWN';
       ctx.fillStyle = '#cc00ff';
       ctx.shadowColor = '#cc00ff';
       ctx.shadowBlur = 4;
-      const predStatus = state.rivalAlive ? '\u26A0 HUNTING YOU' : '\u{23F3} RESPAWNING...';
-      ctx.fillText(predStatus, width * 0.65, 18);
+      ctx.fillText(status, rx, topMidY);
       ctx.shadowBlur = 0;
     } else if (state.trackId === TrackId.ASTAR) {
-      // A* mode: show both food counts
-      ctx.fillStyle = NEON_CYAN;
-      ctx.textAlign = 'center';
-      ctx.fillText(`YOU: ${state.foodEaten}/${state.level.foodToWin}`, width * 0.35, 18);
       ctx.fillStyle = '#ffaa00';
       ctx.shadowColor = '#ffaa00';
       ctx.shadowBlur = 4;
-      ctx.fillText(`A\u2605: ${state.rivalFoodEaten}/${state.level.foodToWin}`, width * 0.65, 18);
+      ctx.fillText(`A\u2605  ${state.rivalFoodEaten}/${state.level.foodToWin}`, rx, topMidY);
       ctx.shadowBlur = 0;
     } else if (state.trackId === TrackId.SWARM) {
-      ctx.fillStyle = NEON_CYAN;
-      ctx.textAlign = 'center';
-      ctx.fillText(`${state.foodEaten}/${state.level.foodToWin}`, width * 0.35, 18);
       const alive = state.swarmSnakes.filter(s => s.alive).length;
       ctx.fillStyle = '#ff2266';
       ctx.shadowColor = '#ff2266';
       ctx.shadowBlur = 4;
-      ctx.fillText(`SWARM: ${alive}/${state.swarmSnakes.length}`, width * 0.65, 18);
+      ctx.fillText(`SWARM  ${alive}/${state.swarmSnakes.length}`, rx, topMidY);
       ctx.shadowBlur = 0;
-    } else {
-      // Standard: Score + Food progress
-      ctx.fillStyle = '#ffffff';
-      ctx.textAlign = 'center';
-      ctx.fillText(`SCORE: ${state.score}`, width / 2, 18);
-
-      ctx.fillStyle = NEON_GREEN;
-      ctx.shadowColor = NEON_GREEN;
-      ctx.shadowBlur = 4;
-      ctx.textAlign = 'right';
-      ctx.fillText(`${state.foodEaten}/${state.level.foodToWin}`, width - 100, 18);
-      ctx.shadowBlur = 0;
-    }
-
-    // Lives (not shown in multiplayer/swarm)
-    if (state.trackId !== TrackId.MULTIPLAYER && state.trackId !== TrackId.SWARM) {
-      ctx.fillStyle = NEON_PINK;
-      ctx.shadowColor = NEON_PINK;
-      ctx.shadowBlur = 4;
-      ctx.textAlign = 'right';
-      const hearts = '\u2665'.repeat(state.lives);
-      ctx.fillText(hearts, width - 12, 18);
-      ctx.shadowBlur = 0;
-    }
-
-    // Hazard indicator
-    if (state.trackId === TrackId.HAZARDS && state.hazards.length > 0) {
+    } else if (state.trackId === TrackId.HAZARDS && state.hazards.length > 0) {
       ctx.fillStyle = '#ff0044';
       ctx.shadowColor = '#ff0044';
       ctx.shadowBlur = 4;
-      ctx.textAlign = 'right';
-      ctx.fillText(`\u26A0 ${state.hazards.filter(h => h.warningTicks <= 0).length} active`, width - 12, 18);
+      ctx.fillText(`\u26A0 ${state.hazards.filter(h => h.warningTicks <= 0).length} active`, rx, topMidY);
       ctx.shadowBlur = 0;
     }
 
-    // Combo indicator
+    // ---- BOTTOM PANEL ----
+    this.drawPanel(panelX, botY, panelW, botH, 'rgba(100, 50, 200, 0.35)');
+
+    const botMidY = botY + botH / 2;
+
+    // Hearts for lives (left) — not shown in multiplayer/swarm
+    if (state.trackId !== TrackId.MULTIPLAYER && state.trackId !== TrackId.SWARM) {
+      ctx.font = '15px "Segoe UI", system-ui, sans-serif';
+      ctx.textAlign = 'left';
+      const maxLives = 3;
+      const heartX = panelX + 12;
+      for (let i = 0; i < maxLives; i++) {
+        const alive = i < state.lives;
+        ctx.fillStyle = alive ? NEON_PINK : 'rgba(255,255,255,0.12)';
+        if (alive) {
+          ctx.shadowColor = NEON_PINK;
+          ctx.shadowBlur = 6;
+        } else {
+          ctx.shadowBlur = 0;
+        }
+        ctx.fillText('\u2665', heartX + i * 18, botMidY);
+      }
+      ctx.shadowBlur = 0;
+    }
+
+    // Food progress bar (center)
+    const barW = Math.min(panelW * 0.35, 140);
+    const barH = 10;
+    const barX = panelX + (panelW - barW) / 2;
+    const barY = botMidY - barH / 2;
+    const eaten = state.foodEaten;
+    const goal = state.level.foodToWin;
+    this.drawProgressBar(barX, barY, barW, barH, eaten / goal, NEON_GREEN, NEON_GREEN);
+
+    // Food text on top of bar
+    ctx.font = 'bold 10px "Segoe UI", system-ui, sans-serif';
+    ctx.fillStyle = '#ffffff';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(`${eaten} / ${goal}`, barX + barW / 2, botMidY);
+
+    // Score (right)
+    ctx.font = 'bold 13px "Segoe UI", system-ui, sans-serif';
+    ctx.textAlign = 'right';
+    ctx.fillStyle = NEON_YELLOW;
+    ctx.shadowColor = NEON_YELLOW;
+    ctx.shadowBlur = 4;
+    ctx.fillText(`\u2605 ${state.score}`, panelX + panelW - 12, botMidY);
+    ctx.shadowBlur = 0;
+
+    // Combo indicator (floats above bottom panel)
     if (state.combo > 1) {
       ctx.fillStyle = NEON_YELLOW;
       ctx.shadowColor = NEON_YELLOW;
-      ctx.shadowBlur = 6;
+      ctx.shadowBlur = 8;
       ctx.textAlign = 'center';
       ctx.font = 'bold 14px "Segoe UI", system-ui, sans-serif';
-      ctx.fillText(`COMBO x${state.combo}`, width / 2, 52);
+      ctx.fillText(`COMBO x${state.combo}`, panelX + panelW / 2, botY - 10);
       ctx.shadowBlur = 0;
     }
   }

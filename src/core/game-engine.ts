@@ -311,6 +311,10 @@ export function tick(state: GameState, dt: number): TickResult {
         };
       }
       const newState = createInitialState(state.level, state.levelIndex, lives, state.score - state.levelScore, state.trackId);
+      // Preserve food eaten across lives so progress isn't lost
+      newState.foodEaten = state.foodEaten;
+      newState.levelScore = state.levelScore;
+      newState.score = state.score;
       return { state: newState, events };
     }
     return { state: { ...state, deathTimer }, events };
