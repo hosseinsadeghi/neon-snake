@@ -186,6 +186,101 @@ canvas#game-canvas {
 .auth-divider::before { margin-right: 12px; }
 .auth-divider::after { margin-left: 12px; }
 
+/* ============ Swarm Config ============ */
+
+.swarm-config-title {
+  font-family: 'Orbitron', monospace;
+  font-size: 1.6rem;
+  font-weight: 700;
+  color: #ff2266;
+  text-shadow: 0 0 12px rgba(255, 34, 102, 0.5);
+  margin-bottom: 0.3rem;
+}
+
+.swarm-config-subtitle {
+  font-size: 0.9rem;
+  color: rgba(255,255,255,0.5);
+  margin-bottom: 2rem;
+}
+
+.swarm-slider-wrap {
+  width: 320px;
+  margin-bottom: 2rem;
+}
+
+.swarm-label {
+  display: block;
+  font-family: 'Orbitron', monospace;
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: var(--neon-cyan);
+  text-shadow: 0 0 6px rgba(0, 245, 255, 0.3);
+  margin-bottom: 10px;
+  letter-spacing: 2px;
+}
+
+.swarm-slider-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.swarm-slider {
+  flex: 1;
+  -webkit-appearance: none;
+  appearance: none;
+  height: 6px;
+  border-radius: 3px;
+  background: rgba(255,255,255,0.1);
+  outline: none;
+}
+
+.swarm-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: #ff2266;
+  box-shadow: 0 0 12px rgba(255, 34, 102, 0.6), 0 0 4px rgba(255, 34, 102, 0.8);
+  cursor: pointer;
+  border: 2px solid rgba(255,255,255,0.3);
+  transition: box-shadow 0.15s;
+}
+
+.swarm-slider::-webkit-slider-thumb:hover {
+  box-shadow: 0 0 20px rgba(255, 34, 102, 0.8), 0 0 6px rgba(255, 34, 102, 1);
+}
+
+.swarm-slider::-moz-range-thumb {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: #ff2266;
+  box-shadow: 0 0 12px rgba(255, 34, 102, 0.6);
+  cursor: pointer;
+  border: 2px solid rgba(255,255,255,0.3);
+}
+
+.swarm-count-val {
+  font-family: 'Orbitron', monospace;
+  font-size: 1.8rem;
+  font-weight: 900;
+  color: #ff2266;
+  text-shadow: 0 0 10px rgba(255, 34, 102, 0.5);
+  min-width: 54px;
+  text-align: right;
+}
+
+.swarm-range-hints {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 6px;
+  font-size: 0.65rem;
+  color: rgba(255,255,255,0.3);
+  letter-spacing: 1px;
+}
+
 /* ============ Level Select ============ */
 
 .level-select-title {

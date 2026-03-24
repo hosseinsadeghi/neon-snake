@@ -1,5 +1,5 @@
 import './style.css';
-import { Action, GamePhase, GameState, PlayerProgress, TrackDef, TrackId } from './core/types';
+import { Action, Direction, GamePhase, GameState, PlayerProgress, TrackDef, TrackId } from './core/types';
 import { createInitialState, applyAction, tick, GameEvent } from './core/game-engine';
 import { ALL_TRACKS, TRACK_GROUPS } from './core/levels/index';
 import { generateLevel, generateEndlessLevel } from './core/procedural';
@@ -41,6 +41,8 @@ let storage: StorageService = new LocalStorageService();
 let currentUser: AuthUser | null = null;
 let currentTrack: TrackDef | null = null;
 let lastLevelIndex = 0;
+let pendingSwarmLevelIndex = 0; // level index waiting for swarm config
+let lastSwarmLevel: import('./core/types').LevelDef | null = null; // cached swarm level with custom spawns
 
 const canvas = document.getElementById('game-canvas') as HTMLCanvasElement;
 const renderer = new Renderer(canvas);
@@ -54,7 +56,10 @@ const levelScreen = document.getElementById('level-screen')!;
 const pauseMenu = document.getElementById('pause-menu')!;
 const gameoverScreen = document.getElementById('gameover-screen')!;
 const btnGameMenu = document.getElementById('btn-game-menu')!;
-const allScreens = [titleScreen, trackScreen, levelScreen, pauseMenu, gameoverScreen];
+const swarmConfig = document.getElementById('swarm-config')!;
+const swarmSlider = document.getElementById('swarm-count') as HTMLInputElement;
+const swarmCountVal = document.getElementById('swarm-count-val')!;
+const allScreens = [titleScreen, trackScreen, levelScreen, pauseMenu, gameoverScreen, swarmConfig];
 
 let activeScreen: HTMLElement | null = null;
 
@@ -624,14 +629,82 @@ function startLevel(levelIndex: number) {
     return;
   }
 
+  // Swarm track: show config modal to pick snake count
+  if (currentTrack.id === TrackId.SWARM) {
+    pendingSwarmLevelIndex = levelIndex;
+    const level = currentTrack.levels[levelIndex];
+    document.getElementById('swarm-level-name')!.textContent = `LV.${level.id} ${level.name} — ${level.description}`;
+    showScreen(swarmConfig);
+    return;
+  }
+
+  launchLevel(levelIndex);
+}
+
+function launchLevel(levelIndex: number, overrideLevel?: import('./core/types').LevelDef) {
+  if (!currentTrack) return;
   showScreen(null);
   lastLevelIndex = levelIndex;
-  const level = currentTrack.levels[levelIndex];
+  // For swarm: use override or cached level with custom snake count
+  let level: import('./core/types').LevelDef;
+  if (overrideLevel) {
+    level = overrideLevel;
+    lastSwarmLevel = overrideLevel;
+  } else if (currentTrack.id === TrackId.SWARM && lastSwarmLevel && lastSwarmLevel.id === currentTrack.levels[levelIndex].id) {
+    level = lastSwarmLevel;
+  } else {
+    level = currentTrack.levels[levelIndex];
+    lastSwarmLevel = null;
+  }
   gameState = createInitialState(level, levelIndex, 3, 0, currentTrack.id);
   input.setMode(currentTrack.id);
   renderer.resize();
   renderer.getParticles().clear();
   renderer.clearFloatingTexts();
+}
+
+/** Generate N spawn positions distributed around the arena edges */
+function generateSwarmSpawns(
+  count: number, gridW: number, gridH: number, walls: { x: number; y: number }[],
+): { pos: { x: number; y: number }; dir: Direction }[] {
+  const wallSet = new Set(walls.map(w => `${w.x},${w.y}`));
+  const centerX = Math.floor(gridW / 2);
+  const centerY = Math.floor(gridH / 2);
+  // Player starts at center — avoid spawning within 5 cells of center
+  const safeR = 5;
+  const spawns: { pos: { x: number; y: number }; dir: Direction }[] = [];
+
+  // Build candidate positions along inner edges (2 cells from wall)
+  const candidates: { pos: { x: number; y: number }; dir: Direction }[] = [];
+  const margin = 3; // distance from border wall
+  // Top row
+  for (let x = margin; x < gridW - margin; x += 2) {
+    if (!wallSet.has(`${x},${margin}`)) candidates.push({ pos: { x, y: margin }, dir: Direction.DOWN });
+  }
+  // Bottom row
+  for (let x = margin; x < gridW - margin; x += 2) {
+    if (!wallSet.has(`${x},${gridH - margin - 1}`)) candidates.push({ pos: { x, y: gridH - margin - 1 }, dir: Direction.UP });
+  }
+  // Left col
+  for (let y = margin + 2; y < gridH - margin - 2; y += 2) {
+    if (!wallSet.has(`${margin},${y}`)) candidates.push({ pos: { x: margin, y }, dir: Direction.RIGHT });
+  }
+  // Right col
+  for (let y = margin + 2; y < gridH - margin - 2; y += 2) {
+    if (!wallSet.has(`${gridW - margin - 1},${y}`)) candidates.push({ pos: { x: gridW - margin - 1, y }, dir: Direction.LEFT });
+  }
+
+  // Filter out positions too close to center (player start)
+  const safe = candidates.filter(c =>
+    Math.abs(c.pos.x - centerX) > safeR || Math.abs(c.pos.y - centerY) > safeR
+  );
+
+  // Pick up to `count` positions, cycling through candidates if needed
+  for (let i = 0; i < count; i++) {
+    const pool = safe.length > 0 ? safe : candidates;
+    spawns.push(pool[i % pool.length]);
+  }
+  return spawns;
 }
 
 async function loadProgress() {
@@ -723,7 +796,7 @@ document.getElementById('btn-restart')!.addEventListener('click', () => {
   if (currentTrack?.id === TrackId.ENDLESS) {
     startEndless();
   } else {
-    startLevel(lastLevelIndex);
+    launchLevel(lastLevelIndex);
   }
 });
 
@@ -748,7 +821,7 @@ document.getElementById('btn-retry')!.addEventListener('click', () => {
   if (currentTrack?.id === TrackId.ENDLESS) {
     startEndless();
   } else {
-    startLevel(lastLevelIndex);
+    launchLevel(lastLevelIndex);
   }
 });
 
@@ -766,6 +839,25 @@ document.getElementById('btn-gameover-levels')!.addEventListener('click', () => 
 document.getElementById('btn-gameover-title')!.addEventListener('click', () => {
   gameState = null;
   showScreen(titleScreen);
+});
+
+// ============ Swarm Config ============
+
+swarmSlider.addEventListener('input', () => {
+  swarmCountVal.textContent = swarmSlider.value;
+});
+
+document.getElementById('btn-swarm-start')!.addEventListener('click', () => {
+  if (!currentTrack) return;
+  const count = Math.min(100, Math.max(1, parseInt(swarmSlider.value, 10) || 5));
+  const level = { ...currentTrack.levels[pendingSwarmLevelIndex] };
+  level.swarmSpawns = generateSwarmSpawns(count, level.gridWidth, level.gridHeight, level.walls);
+  launchLevel(pendingSwarmLevelIndex, level);
+});
+
+document.getElementById('btn-swarm-back')!.addEventListener('click', () => {
+  showScreen(levelScreen);
+  renderLevelSelect();
 });
 
 // ============ Game Loop ============

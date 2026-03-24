@@ -120,6 +120,29 @@
       </button>
     </div>
 
+    <!-- Swarm Config Modal -->
+    <div id="swarm-config" class="screen-overlay hidden">
+      <h2 class="swarm-config-title">SWARM CONFIG</h2>
+      <p class="swarm-config-subtitle" id="swarm-level-name"></p>
+      <div class="swarm-slider-wrap">
+        <label class="swarm-label">ENEMY SNAKES</label>
+        <div class="swarm-slider-row">
+          <input type="range" id="swarm-count" class="swarm-slider" min="1" max="100" value="5">
+          <span id="swarm-count-val" class="swarm-count-val">5</span>
+        </div>
+        <div class="swarm-range-hints">
+          <span>1</span><span>Chill</span><span>Chaos</span><span>100</span>
+        </div>
+      </div>
+      <button id="btn-swarm-start" class="btn btn-primary">START</button>
+      <button id="btn-swarm-back" class="btn btn-back">
+        <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/>
+        </svg>
+        Back
+      </button>
+    </div>
+
     <!-- Level Select Screen -->
     <div id="level-screen" class="screen-overlay hidden">
       <h2 id="level-screen-title" class="level-select-title">SELECT LEVEL</h2>
