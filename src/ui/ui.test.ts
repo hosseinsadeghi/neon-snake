@@ -53,8 +53,8 @@ describe('Track Select UI rendering', () => {
     const cards = grid.querySelectorAll('.track-card');
     const labels = grid.querySelectorAll('.track-group-label');
 
-    // 7 tracks visible (MULTIPLAYER hidden), 3 group labels
-    expect(cards.length).toBe(7);
+    // 8 tracks visible (MULTIPLAYER hidden), 3 group labels
+    expect(cards.length).toBe(8);
     expect(labels.length).toBe(3);
   });
 
@@ -62,7 +62,7 @@ describe('Track Select UI rendering', () => {
     renderTrackGrid(ALL_TRACKS, false);
     const grid = document.getElementById('track-grid')!;
     const cards = grid.querySelectorAll('.track-card');
-    expect(cards.length).toBe(8);
+    expect(cards.length).toBe(9);
   });
 
   it('renders group labels with correct text', () => {
@@ -92,13 +92,14 @@ describe('Track Select UI rendering', () => {
     expect(ids).toHaveLength(3);
   });
 
-  it('VS AI group contains Rival, Predator, A* Hunt', () => {
+  it('VS AI group contains Rival, Predator, A* Hunt, Swarm', () => {
     const aiGroup = TRACK_GROUPS.find(g => g.label === 'VS AI')!;
     const ids = aiGroup.tracks.map(t => t.id);
     expect(ids).toContain(TrackId.RIVAL);
     expect(ids).toContain(TrackId.PREDATOR);
     expect(ids).toContain(TrackId.ASTAR);
-    expect(ids).toHaveLength(3);
+    expect(ids).toContain(TrackId.SWARM);
+    expect(ids).toHaveLength(4);
   });
 });
 

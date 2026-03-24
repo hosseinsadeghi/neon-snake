@@ -216,6 +216,7 @@ export class Renderer {
     this.drawSnake(state);
     this.drawRivalSnake(state);
     this.drawP2Snake(state);
+    this.drawSwarmSnakes(state);
 
     // Particles
     this.particles.update(dt);
@@ -745,6 +746,16 @@ export class Renderer {
       ctx.shadowBlur = 4;
       ctx.fillText(`A\u2605: ${state.rivalFoodEaten}/${state.level.foodToWin}`, width * 0.65, 18);
       ctx.shadowBlur = 0;
+    } else if (state.trackId === TrackId.SWARM) {
+      ctx.fillStyle = NEON_CYAN;
+      ctx.textAlign = 'center';
+      ctx.fillText(`${state.foodEaten}/${state.level.foodToWin}`, width * 0.35, 18);
+      const alive = state.swarmSnakes.filter(s => s.alive).length;
+      ctx.fillStyle = '#ff2266';
+      ctx.shadowColor = '#ff2266';
+      ctx.shadowBlur = 4;
+      ctx.fillText(`SWARM: ${alive}/${state.swarmSnakes.length}`, width * 0.65, 18);
+      ctx.shadowBlur = 0;
     } else {
       // Standard: Score + Food progress
       ctx.fillStyle = '#ffffff';
@@ -759,8 +770,8 @@ export class Renderer {
       ctx.shadowBlur = 0;
     }
 
-    // Lives (not shown in multiplayer)
-    if (state.trackId !== TrackId.MULTIPLAYER) {
+    // Lives (not shown in multiplayer/swarm)
+    if (state.trackId !== TrackId.MULTIPLAYER && state.trackId !== TrackId.SWARM) {
       ctx.fillStyle = NEON_PINK;
       ctx.shadowColor = NEON_PINK;
       ctx.shadowBlur = 4;
@@ -925,6 +936,28 @@ export class Renderer {
   private drawP2Snake(state: GameState) {
     if (state.trackId !== TrackId.MULTIPLAYER || !state.p2Snake || !state.p2Alive) return;
     this.drawSecondarySnake(state.p2Snake, state.p2Direction, '#39ff14', '#00cc00', false);
+  }
+
+  // ============ Swarm Snakes ============
+
+  private static readonly SWARM_COLORS: [string, string][] = [
+    ['#ff2266', '#cc0044'],
+    ['#ff6600', '#cc4400'],
+    ['#ff00ff', '#aa00aa'],
+    ['#ffaa00', '#cc8800'],
+    ['#00ccff', '#0088cc'],
+    ['#ff4488', '#cc2266'],
+    ['#aa44ff', '#7722cc'],
+    ['#44ff88', '#22cc66'],
+  ];
+
+  private drawSwarmSnakes(state: GameState) {
+    if (state.trackId !== TrackId.SWARM || !state.swarmSnakes) return;
+    for (const sw of state.swarmSnakes) {
+      if (!sw.alive) continue;
+      const colors = Renderer.SWARM_COLORS[sw.colorIndex % Renderer.SWARM_COLORS.length];
+      this.drawSecondarySnake(sw.segments, sw.direction, colors[0], colors[1], false);
+    }
   }
 
   private drawSecondarySnake(snake: Point[], dir: Direction, colorA: string, colorB: string, faded: boolean) {

@@ -7,6 +7,7 @@ import {
   LevelDef,
   Point,
   SpecialFood,
+  SwarmSnake,
   TrackId,
 } from './types';
 
@@ -65,6 +66,9 @@ export function createInitialState(
     hazards: [],
     hazardSpawnTimer: 5, // First hazard appears quickly
 
+    // Swarm
+    swarmSnakes: [],
+
     // Time
     timeRemaining: 0,
 
@@ -87,6 +91,16 @@ export function createInitialState(
     state.p2Direction = level.player2StartDir || Direction.LEFT;
     state.p2NextDirection = state.p2Direction;
     state.p2Alive = true;
+  }
+
+  if (trackId === TrackId.SWARM && level.swarmSpawns) {
+    state.swarmSnakes = level.swarmSpawns.map((spawn, i) => ({
+      segments: buildSnake(spawn.pos, spawn.dir, 3),
+      direction: spawn.dir,
+      alive: true,
+      respawnTimer: 0,
+      colorIndex: i,
+    }));
   }
 
   state.food = spawnFood(state);
@@ -127,6 +141,11 @@ function isOccupied(p: Point, state: GameState): boolean {
     if (state.p2Snake.some(s => pointsEqual(s, p))) return true;
   }
   if (state.hazards.some(h => pointsEqual(h.pos, p))) return true;
+  if (state.swarmSnakes) {
+    for (const sw of state.swarmSnakes) {
+      if (sw.alive && sw.segments.some(s => pointsEqual(s, p))) return true;
+    }
+  }
   return false;
 }
 
@@ -366,15 +385,23 @@ function gameTick(state: GameState): TickResult {
   const p1HitsRival = state.rivalSnake ? state.rivalSnake.some(s => pointsEqual(s, newHead)) : false;
   const p1HitsP2 = state.p2Snake && state.p2Alive ? state.p2Snake.some(s => pointsEqual(s, newHead)) : false;
   const p1HitsHazard = state.hazards.length > 0 && state.hazards.some(h => h.warningTicks <= 0 && pointsEqual(h.pos, newHead));
+  const p1HitsSwarm = state.swarmSnakes.length > 0 && state.swarmSnakes.some(sw => sw.alive && sw.segments.some(s => pointsEqual(s, newHead)));
 
-  if (p1HitsWall || p1HitsSelf || p1HitsRival || p1HitsP2 || p1HitsHazard) {
+  if (p1HitsWall || p1HitsSelf || p1HitsRival || p1HitsP2 || p1HitsHazard || p1HitsSwarm) {
     allEvents.push({ type: 'death', pos: head, player: 'p1' });
 
     if (state.trackId === TrackId.MULTIPLAYER && state.p2Alive) {
-      // P2 wins this level
-      allEvents.push({ type: 'p2_wins' });
+      // Respawn P1 — food and scores persist
+      const newP1Snake = buildSnake(state.level.snakeStart, state.level.snakeStartDir, 3);
       return {
-        state: { ...state, phase: GamePhase.LEVEL_COMPLETE, levelCompleteTimer: 2500, direction: dir },
+        state: {
+          ...state,
+          snake: newP1Snake,
+          direction: state.level.snakeStartDir,
+          nextDirection: state.level.snakeStartDir,
+          directionQueue: [],
+          currentSpeed: state.level.initialSpeed,
+        },
         events: allEvents,
       };
     }
@@ -451,6 +478,13 @@ function gameTick(state: GameState): TickResult {
     const p2Result = moveP2(state);
     state = p2Result.state;
     allEvents.push(...p2Result.events);
+  }
+
+  // --- Move Swarm ---
+  if (state.trackId === TrackId.SWARM && state.swarmSnakes.length > 0) {
+    const swarmResult = moveSwarm(state);
+    state = swarmResult.state;
+    allEvents.push(...swarmResult.events);
   }
 
   // --- Update Hazards (for HAZARDS track, or any level with hazardSpawnInterval) ---
@@ -644,6 +678,9 @@ function getValidDirections(head: Point, currentDir: Direction, state: GameState
     if (selfSnake.some(s => pointsEqual(s, next))) return false;
     if (state.p2Snake && state.p2Snake.some(s => pointsEqual(s, next))) return false;
     if (state.hazards.some(h => h.warningTicks <= 0 && pointsEqual(h.pos, next))) return false;
+    for (const sw of state.swarmSnakes) {
+      if (sw.alive && sw.segments !== selfSnake && sw.segments.some(s => pointsEqual(s, next))) return false;
+    }
     return true;
   });
 }
@@ -717,15 +754,16 @@ function moveP2(state: GameState): TickResult {
 
   if (hitsWall || hitsSelf || hitsP1) {
     events.push({ type: 'death', pos: head, player: 'p2' });
-    events.push({ type: 'p1_wins' });
+    // Respawn P2 — food and scores persist
+    const p2Start = state.level.player2Start!;
+    const p2Dir = state.level.player2StartDir || Direction.LEFT;
+    const newP2Snake = buildSnake(p2Start, p2Dir, 3);
     state = {
       ...state,
-      p2Alive: false,
-      p2Direction: dir,
-      p2NextDirection: dir,
-      p2DirectionQueue: queue,
-      phase: GamePhase.LEVEL_COMPLETE,
-      levelCompleteTimer: 2500,
+      p2Snake: newP2Snake,
+      p2Direction: p2Dir,
+      p2NextDirection: p2Dir,
+      p2DirectionQueue: [],
     };
     return { state, events };
   }
@@ -1164,6 +1202,121 @@ function aStarSearch(start: Point, goal: Point, state: GameState, selfSnake: Poi
   }
 
   return null;
+}
+
+// ==================== Swarm Snakes ====================
+// Multiple AI snakes that try to block the player rather than eat food.
+// They intercept the player's path, move erratically, and collide with each other.
+
+function moveSwarm(state: GameState): TickResult {
+  const events: GameEvent[] = [];
+  const RESPAWN_TIME = 3000; // ms
+
+  const newSwarm: SwarmSnake[] = state.swarmSnakes.map((sw, idx) => {
+    if (!sw.alive) {
+      // Handle respawn timer
+      const remaining = sw.respawnTimer - state.currentSpeed;
+      if (remaining <= 0 && state.level.swarmSpawns) {
+        const spawn = state.level.swarmSpawns[idx];
+        const newSegs = buildSnake(spawn.pos, spawn.dir, 3);
+        // Check spawn area is clear
+        const blocked = newSegs.some(seg =>
+          state.snake.some(s => pointsEqual(s, seg))
+        );
+        if (!blocked) {
+          return { ...sw, segments: newSegs, direction: spawn.dir, alive: true, respawnTimer: 0 };
+        }
+        return { ...sw, respawnTimer: 500 }; // retry soon
+      }
+      return { ...sw, respawnTimer: remaining };
+    }
+
+    const head = sw.segments[sw.segments.length - 1];
+    const dir = computeSwarmDirection(state, sw, idx);
+    let newHead = applyDir(head, dir);
+
+    // Wall / self / player / other swarm collision
+    const hitsWall = isWallOrOOB(newHead, state.level);
+    const hitsSelf = sw.segments.slice(1).some(s => pointsEqual(s, newHead));
+    const hitsPlayer = state.snake.some(s => pointsEqual(s, newHead));
+    const hitsOther = state.swarmSnakes.some((other, oi) =>
+      oi !== idx && other.alive && other.segments.some(s => pointsEqual(s, newHead))
+    );
+
+    if (hitsWall || hitsSelf || hitsOther) {
+      events.push({ type: 'death', pos: head, player: 'rival' });
+      return { ...sw, alive: false, respawnTimer: RESPAWN_TIME };
+    }
+
+    if (hitsPlayer) {
+      // Swarm snake dies on contact with player but also kills player
+      // (player death is handled by P1 collision check)
+      events.push({ type: 'death', pos: head, player: 'rival' });
+      return { ...sw, alive: false, respawnTimer: RESPAWN_TIME };
+    }
+
+    let newSegs = [...sw.segments, newHead];
+    // Swarm snakes don't eat food - they just block. Grow slowly over time.
+    const totalMoves = newSegs.length;
+    if (totalMoves > 6 || Math.random() > 0.02) {
+      newSegs.shift(); // don't grow
+    }
+
+    return { ...sw, segments: newSegs, direction: dir };
+  });
+
+  return { state: { ...state, swarmSnakes: newSwarm }, events };
+}
+
+function computeSwarmDirection(state: GameState, sw: SwarmSnake, _idx: number): Direction {
+  const head = sw.segments[sw.segments.length - 1];
+  const playerHead = state.snake[state.snake.length - 1];
+  const dirs = [Direction.UP, Direction.DOWN, Direction.LEFT, Direction.RIGHT];
+
+  // Valid directions (avoid walls, self, other swarm snakes)
+  const validDirs = dirs.filter(d => {
+    if (d === oppositeDirection(sw.direction)) return false;
+    const next = applyDir(head, d);
+    if (isWallOrOOB(next, state.level)) return false;
+    if (sw.segments.some(s => pointsEqual(s, next))) return false;
+    // Avoid other swarm snakes
+    for (const other of state.swarmSnakes) {
+      if (other !== sw && other.alive && other.segments.some(s => pointsEqual(s, next))) return false;
+    }
+    return true;
+  });
+
+  if (validDirs.length === 0) return sw.direction;
+
+  // 30% chance of random erratic movement
+  if (Math.random() < 0.3) {
+    return validDirs[Math.floor(Math.random() * validDirs.length)];
+  }
+
+  // Try to intercept: aim for where the player will be
+  const predictedPos = predictPos(playerHead, state.nextDirection, state.level, 4);
+
+  // 50% aim at predicted position, 50% aim directly at player
+  const target = Math.random() < 0.5 ? predictedPos : playerHead;
+
+  // Greedy: pick direction that minimizes distance to target
+  validDirs.sort((a, b) => {
+    const pa = applyDir(head, a);
+    const pb = applyDir(head, b);
+    return manhattan(pa, target) - manhattan(pb, target);
+  });
+
+  return validDirs[0];
+}
+
+function predictPos(pos: Point, dir: Direction, level: LevelDef, steps: number): Point {
+  let p = { ...pos };
+  for (let i = 0; i < steps; i++) {
+    const next = applyDir(p, dir);
+    if (isWallOrOOB(next, level)) break;
+    p = next;
+  }
+  return p;
 }
 
 // Flood fill reachability check

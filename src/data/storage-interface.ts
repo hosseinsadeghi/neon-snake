@@ -24,6 +24,7 @@ export function defaultProgress(): PlayerProgress {
       [TrackId.ASTAR]: defaultTrackProgress(),
       [TrackId.INFINITE]: defaultTrackProgress(),
       [TrackId.ENDLESS]: defaultTrackProgress(),
+      [TrackId.SWARM]: defaultTrackProgress(),
     },
     totalScore: 0,
   };

@@ -14,6 +14,7 @@ export enum TrackId {
   ASTAR = 'astar',
   INFINITE = 'infinite',
   ENDLESS = 'endless',
+  SWARM = 'swarm',
 }
 
 export interface TrackDef {
@@ -73,6 +74,7 @@ export interface LevelDef {
   player2Start?: Point;
   player2StartDir?: Direction;
   timeLimit?: number; // seconds, for timed modes
+  swarmSpawns?: { pos: Point; dir: Direction }[];
 }
 
 export interface SpecialFood {
@@ -87,6 +89,14 @@ export interface Hazard {
   maxTtl: number;
   type: 'skull' | 'bomb' | 'lightning';
   warningTicks: number; // ticks remaining in warning phase (not yet deadly)
+}
+
+export interface SwarmSnake {
+  segments: Point[];
+  direction: Direction;
+  alive: boolean;
+  respawnTimer: number;
+  colorIndex: number;
 }
 
 export interface SnakeState {
@@ -142,6 +152,9 @@ export interface GameState {
   // Hazards track
   hazards: Hazard[];
   hazardSpawnTimer: number;
+
+  // Swarm track
+  swarmSnakes: SwarmSnake[];
 
   // Time limit (for rival mode)
   timeRemaining: number; // ms, 0 = no limit

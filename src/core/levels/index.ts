@@ -19,6 +19,7 @@ import { MULTIPLAYER_LEVELS } from './multiplayer-levels';
 import { HAZARD_LEVELS } from './hazard-levels';
 import { PREDATOR_LEVELS } from './predator-levels';
 import { ASTAR_LEVELS } from './astar-levels';
+import { SWARM_LEVELS } from './swarm-levels';
 import { generateEndlessLevel } from '../procedural';
 
 export const CLASSIC_LEVELS: LevelDef[] = [
@@ -108,6 +109,14 @@ export const ALL_TRACKS: TrackDef[] = [
     color: '#ffaa00',
     levels: ASTAR_LEVELS,
   },
+  {
+    id: TrackId.SWARM,
+    name: 'SWARM',
+    description: 'Survive a horde of crazy snakes that try to block you.',
+    icon: '\u{1F40D}',
+    color: '#ff2266',
+    levels: SWARM_LEVELS,
+  },
 ];
 
 export const TRACK_GROUPS: TrackGroup[] = [
@@ -119,7 +128,7 @@ export const TRACK_GROUPS: TrackGroup[] = [
   {
     label: 'VS AI',
     category: 'ai',
-    tracks: ALL_TRACKS.filter(t => [TrackId.RIVAL, TrackId.PREDATOR, TrackId.ASTAR].includes(t.id)),
+    tracks: ALL_TRACKS.filter(t => [TrackId.RIVAL, TrackId.PREDATOR, TrackId.ASTAR, TrackId.SWARM].includes(t.id)),
   },
   {
     label: 'SPECIAL',
@@ -128,4 +137,4 @@ export const TRACK_GROUPS: TrackGroup[] = [
   },
 ];
 
-export { RIVAL_LEVELS, MULTIPLAYER_LEVELS, HAZARD_LEVELS, PREDATOR_LEVELS, ASTAR_LEVELS };
+export { RIVAL_LEVELS, MULTIPLAYER_LEVELS, HAZARD_LEVELS, PREDATOR_LEVELS, ASTAR_LEVELS, SWARM_LEVELS };
