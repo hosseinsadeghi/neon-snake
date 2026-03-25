@@ -18,12 +18,7 @@ export function defaultProgress(): PlayerProgress {
     tracks: {
       [TrackId.CLASSIC]: defaultTrackProgress(),
       [TrackId.RIVAL]: defaultTrackProgress(),
-      [TrackId.MULTIPLAYER]: defaultTrackProgress(),
-      [TrackId.HAZARDS]: defaultTrackProgress(),
-      [TrackId.PREDATOR]: defaultTrackProgress(),
-      [TrackId.ASTAR]: defaultTrackProgress(),
       [TrackId.INFINITE]: defaultTrackProgress(),
-      [TrackId.ENDLESS]: defaultTrackProgress(),
       [TrackId.SWARM]: defaultTrackProgress(),
     },
     totalScore: 0,

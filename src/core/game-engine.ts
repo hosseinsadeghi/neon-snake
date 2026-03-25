@@ -46,21 +46,13 @@ export function createInitialState(
     combo: 0,
     comboTimer: 0,
 
-    // Rival
+    // Rival / A*
+    useAstar: false,
     rivalSnake: null,
     rivalDirection: Direction.LEFT,
     rivalNextDirection: Direction.LEFT,
     rivalFoodEaten: 0,
     rivalAlive: false,
-
-    // Multiplayer
-    p2Snake: null,
-    p2Direction: Direction.LEFT,
-    p2NextDirection: Direction.LEFT,
-    p2DirectionQueue: [],
-    p2Score: 0,
-    p2FoodEaten: 0,
-    p2Alive: false,
 
     // Hazards
     hazards: [],
@@ -78,19 +70,12 @@ export function createInitialState(
 
   // Mode-specific init
   // Init rival snake for tracks that use one, or for procedural levels with rivalAiDifficulty
-  if ((trackId === TrackId.RIVAL || trackId === TrackId.PREDATOR || trackId === TrackId.ASTAR ||
-       ((trackId === TrackId.INFINITE || trackId === TrackId.ENDLESS) && level.rivalAiDifficulty !== undefined)) && level.player2Start) {
+  if ((trackId === TrackId.RIVAL ||
+       (trackId === TrackId.INFINITE && level.rivalAiDifficulty !== undefined)) && level.player2Start) {
     state.rivalSnake = buildSnake(level.player2Start, level.player2StartDir || Direction.LEFT, 3);
     state.rivalDirection = level.player2StartDir || Direction.LEFT;
     state.rivalNextDirection = state.rivalDirection;
     state.rivalAlive = true;
-  }
-
-  if (trackId === TrackId.MULTIPLAYER && level.player2Start) {
-    state.p2Snake = buildSnake(level.player2Start, level.player2StartDir || Direction.LEFT, 3);
-    state.p2Direction = level.player2StartDir || Direction.LEFT;
-    state.p2NextDirection = state.p2Direction;
-    state.p2Alive = true;
   }
 
   if (trackId === TrackId.SWARM && level.swarmSpawns) {
@@ -136,9 +121,6 @@ function isOccupied(p: Point, state: GameState): boolean {
   }
   if (state.rivalSnake) {
     if (state.rivalSnake.some(s => pointsEqual(s, p))) return true;
-  }
-  if (state.p2Snake) {
-    if (state.p2Snake.some(s => pointsEqual(s, p))) return true;
   }
   if (state.hazards.some(h => pointsEqual(h.pos, p))) return true;
   if (state.swarmSnakes) {
@@ -222,27 +204,6 @@ export function applyAction(state: GameState, action: Action): GameState {
 
   if (state.phase !== GamePhase.PLAYING) return state;
 
-  // Player 2 actions (multiplayer)
-  if (action >= Action.P2_UP && action <= Action.P2_RIGHT && state.trackId === TrackId.MULTIPLAYER && state.p2Alive) {
-    let newDir: Direction | null = null;
-    switch (action) {
-      case Action.P2_UP: newDir = Direction.UP; break;
-      case Action.P2_DOWN: newDir = Direction.DOWN; break;
-      case Action.P2_LEFT: newDir = Direction.LEFT; break;
-      case Action.P2_RIGHT: newDir = Direction.RIGHT; break;
-    }
-    if (newDir !== null) {
-      const queue = state.p2DirectionQueue;
-      const lastQueued = queue.length > 0 ? queue[queue.length - 1] : state.p2NextDirection;
-      if (newDir !== oppositeDirection(lastQueued) && newDir !== lastQueued) {
-        const newQueue = [...queue, newDir];
-        if (newQueue.length > 3) newQueue.shift();
-        return { ...state, p2DirectionQueue: newQueue };
-      }
-    }
-    return state;
-  }
-
   // Player 1 direction
   let newDir: Direction | null = null;
   switch (action) {
@@ -280,9 +241,7 @@ export type GameEvent =
   | { type: 'game_win' }
   | { type: 'rival_ate_food'; pos: Point }
   | { type: 'hazard_hit'; pos: Point }
-  | { type: 'hazard_spawn'; pos: Point }
-  | { type: 'p2_wins' }
-  | { type: 'p1_wins' };
+  | { type: 'hazard_spawn'; pos: Point };
 
 // ==================== Main Tick ====================
 
@@ -387,29 +346,11 @@ function gameTick(state: GameState): TickResult {
   const p1HitsWall = isWallOrOOB(newHead, state.level);
   const p1HitsSelf = state.snake.slice(1).some(s => pointsEqual(s, newHead));
   const p1HitsRival = state.rivalSnake ? state.rivalSnake.some(s => pointsEqual(s, newHead)) : false;
-  const p1HitsP2 = state.p2Snake && state.p2Alive ? state.p2Snake.some(s => pointsEqual(s, newHead)) : false;
   const p1HitsHazard = state.hazards.length > 0 && state.hazards.some(h => h.warningTicks <= 0 && pointsEqual(h.pos, newHead));
   const p1HitsSwarm = state.swarmSnakes.length > 0 && state.swarmSnakes.some(sw => sw.alive && sw.segments.some(s => pointsEqual(s, newHead)));
 
-  if (p1HitsWall || p1HitsSelf || p1HitsRival || p1HitsP2 || p1HitsHazard || p1HitsSwarm) {
+  if (p1HitsWall || p1HitsSelf || p1HitsRival || p1HitsHazard || p1HitsSwarm) {
     allEvents.push({ type: 'death', pos: head, player: 'p1' });
-
-    if (state.trackId === TrackId.MULTIPLAYER && state.p2Alive) {
-      // Respawn P1 — food and scores persist
-      const newP1Snake = buildSnake(state.level.snakeStart, state.level.snakeStartDir, 3);
-      return {
-        state: {
-          ...state,
-          snake: newP1Snake,
-          direction: state.level.snakeStartDir,
-          nextDirection: state.level.snakeStartDir,
-          directionQueue: [],
-          currentSpeed: state.level.initialSpeed,
-        },
-        events: allEvents,
-      };
-    }
-
     return {
       state: { ...state, phase: GamePhase.DYING, deathTimer: 1500, direction: dir },
       events: allEvents,
@@ -459,29 +400,20 @@ function gameTick(state: GameState): TickResult {
     comboTimer: ate ? 3000 : state.comboTimer,
   };
 
-  // --- Move Rival (for RIVAL track, or INFINITE/ENDLESS with rival) ---
+  // --- Move Rival (for RIVAL track, or INFINITE with rival) ---
   const hasRival = state.rivalSnake && state.rivalAlive;
   if (hasRival) {
-    if (state.trackId === TrackId.RIVAL || state.trackId === TrackId.INFINITE || state.trackId === TrackId.ENDLESS) {
-      const rivalResult = moveRival(state);
-      state = rivalResult.state;
-      allEvents.push(...rivalResult.events);
-    } else if (state.trackId === TrackId.PREDATOR) {
-      const predResult = movePredator(state);
-      state = predResult.state;
-      allEvents.push(...predResult.events);
-    } else if (state.trackId === TrackId.ASTAR) {
-      const astarResult = moveAStarSnake(state);
-      state = astarResult.state;
-      allEvents.push(...astarResult.events);
+    if (state.trackId === TrackId.RIVAL || state.trackId === TrackId.INFINITE) {
+      if (state.useAstar) {
+        const astarResult = moveAStarSnake(state);
+        state = astarResult.state;
+        allEvents.push(...astarResult.events);
+      } else {
+        const rivalResult = moveRival(state);
+        state = rivalResult.state;
+        allEvents.push(...rivalResult.events);
+      }
     }
-  }
-
-  // --- Move P2 ---
-  if (state.trackId === TrackId.MULTIPLAYER && state.p2Snake && state.p2Alive) {
-    const p2Result = moveP2(state);
-    state = p2Result.state;
-    allEvents.push(...p2Result.events);
   }
 
   // --- Move Swarm ---
@@ -492,8 +424,7 @@ function gameTick(state: GameState): TickResult {
   }
 
   // --- Update Hazards (for HAZARDS track, or any level with hazardSpawnInterval) ---
-  if (state.trackId === TrackId.HAZARDS || state.trackId === TrackId.ENDLESS ||
-      (state.trackId === TrackId.INFINITE && state.level.hazardSpawnInterval !== undefined)) {
+  if (state.trackId === TrackId.INFINITE && state.level.hazardSpawnInterval !== undefined) {
     const hazResult = updateHazards(state);
     state = hazResult.state;
     allEvents.push(...hazResult.events);
@@ -521,9 +452,6 @@ function gameTick(state: GameState): TickResult {
   // --- Check level complete ---
   if (foodEaten >= state.level.foodToWin) {
     allEvents.push({ type: 'level_complete' });
-    if (state.trackId === TrackId.MULTIPLAYER) {
-      allEvents.push({ type: 'p1_wins' });
-    }
     return {
       state: { ...state, phase: GamePhase.LEVEL_COMPLETE, levelCompleteTimer: 2500 },
       events: allEvents,
@@ -531,19 +459,10 @@ function gameTick(state: GameState): TickResult {
   }
 
   // Rival win condition: if rival eats enough before player
-  if ((state.trackId === TrackId.RIVAL || state.trackId === TrackId.ASTAR || state.trackId === TrackId.INFINITE) && state.rivalSnake && state.rivalFoodEaten >= state.level.foodToWin) {
+  if ((state.trackId === TrackId.RIVAL || state.trackId === TrackId.INFINITE) && state.rivalSnake && state.rivalFoodEaten >= state.level.foodToWin) {
     allEvents.push({ type: 'death', pos: head, player: 'p1' });
     return {
       state: { ...state, phase: GamePhase.DYING, deathTimer: 1500 },
-      events: allEvents,
-    };
-  }
-
-  // Multiplayer: P2 win check
-  if (state.trackId === TrackId.MULTIPLAYER && state.p2FoodEaten >= state.level.foodToWin) {
-    allEvents.push({ type: 'p2_wins' });
-    return {
-      state: { ...state, phase: GamePhase.LEVEL_COMPLETE, levelCompleteTimer: 2500 },
       events: allEvents,
     };
   }
@@ -680,7 +599,6 @@ function getValidDirections(head: Point, currentDir: Direction, state: GameState
     if (isWallOrOOB(next, state.level)) return false;
     if (state.snake.some(s => pointsEqual(s, next))) return false;
     if (selfSnake.some(s => pointsEqual(s, next))) return false;
-    if (state.p2Snake && state.p2Snake.some(s => pointsEqual(s, next))) return false;
     if (state.hazards.some(h => h.warningTicks <= 0 && pointsEqual(h.pos, next))) return false;
     for (const sw of state.swarmSnakes) {
       if (sw.alive && sw.segments !== selfSnake && sw.segments.some(s => pointsEqual(s, next))) return false;
@@ -727,81 +645,6 @@ function bfsToFood(start: Point, target: Point, state: GameState, selfSnake: Poi
     }
   }
   return null;
-}
-
-// ==================== Player 2 ====================
-
-function moveP2(state: GameState): TickResult {
-  const events: GameEvent[] = [];
-  if (!state.p2Snake || !state.p2Alive) return { state, events };
-
-  // Consume from P2 direction queue
-  let dir = state.p2NextDirection;
-  let queue = state.p2DirectionQueue;
-  if (queue.length > 0) {
-    dir = queue[0];
-    queue = queue.slice(1);
-  }
-
-  const head = state.p2Snake[state.p2Snake.length - 1];
-  let newHead = moveHead(head, dir, state.level);
-
-  const portal = checkPortal(newHead, dir, state.level);
-  if (portal) {
-    newHead = portal.newPos;
-    events.push({ type: 'portal_used', from: portal.from, to: portal.to });
-  }
-
-  const hitsWall = isWallOrOOB(newHead, state.level);
-  const hitsSelf = state.p2Snake.slice(1).some(s => pointsEqual(s, newHead));
-  const hitsP1 = state.snake.some(s => pointsEqual(s, newHead));
-
-  if (hitsWall || hitsSelf || hitsP1) {
-    events.push({ type: 'death', pos: head, player: 'p2' });
-    // Respawn P2 — food and scores persist
-    const p2Start = state.level.player2Start!;
-    const p2Dir = state.level.player2StartDir || Direction.LEFT;
-    const newP2Snake = buildSnake(p2Start, p2Dir, 3);
-    state = {
-      ...state,
-      p2Snake: newP2Snake,
-      p2Direction: p2Dir,
-      p2NextDirection: p2Dir,
-      p2DirectionQueue: [],
-    };
-    return { state, events };
-  }
-
-  let newP2Snake = [...state.p2Snake, newHead];
-  let p2Ate = false;
-
-  if (state.food && pointsEqual(newHead, state.food)) {
-    p2Ate = true;
-    events.push({ type: 'food_eaten', pos: newHead, player: 'p2' });
-    for (let i = 1; i < state.level.growAmount; i++) {
-      newP2Snake = [newP2Snake[0], ...newP2Snake];
-    }
-  } else {
-    newP2Snake.shift();
-  }
-
-  let food = state.food;
-  if (p2Ate) {
-    food = spawnFood({ ...state, p2Snake: newP2Snake, food: null });
-  }
-
-  state = {
-    ...state,
-    p2Snake: newP2Snake,
-    p2Direction: dir,
-    p2NextDirection: dir,
-    p2DirectionQueue: queue,
-    p2FoodEaten: state.p2FoodEaten + (p2Ate ? 1 : 0),
-    p2Score: state.p2Score + (p2Ate ? 10 : 0),
-    food,
-  };
-
-  return { state, events };
 }
 
 // ==================== Hazards ====================
@@ -863,164 +706,6 @@ function updateHazards(state: GameState): TickResult {
   }
 
   return { state: { ...state, hazards, hazardSpawnTimer: timer }, events };
-}
-
-// ==================== Predator AI ====================
-// Unlike Rival (races for food), Predator actively chases the player's head.
-// It uses BFS to find shortest path to the player, with difficulty controlling
-// how often it makes optimal moves vs random ones.
-
-function movePredator(state: GameState): TickResult {
-  const events: GameEvent[] = [];
-  if (!state.rivalSnake || !state.rivalAlive) return { state, events };
-
-  const predDir = computePredatorDirection(state);
-  const pHead = state.rivalSnake[state.rivalSnake.length - 1];
-  let newPHead = moveHead(pHead, predDir, state.level);
-
-  // Portal
-  const portal = checkPortal(newPHead, predDir, state.level);
-  if (portal) newPHead = portal.newPos;
-
-  // Collision: wall, self, player body (but hitting player HEAD = player dies, handled in P1 check)
-  const hitsWall = isWallOrOOB(newPHead, state.level);
-  const hitsSelf = state.rivalSnake.slice(1).some(s => pointsEqual(s, newPHead));
-
-  if (hitsWall || hitsSelf) {
-    // Predator dies - respawn after a delay (it comes back!)
-    // For simplicity: predator dies but respawns at original position after a short pause
-    events.push({ type: 'death', pos: pHead, player: 'rival' });
-
-    // Respawn predator at starting position after a brief "dead" period
-    // We just rebuild it — gives the player a short breather
-    const respawn = state.level.player2Start;
-    if (respawn) {
-      const newSnake = buildSnake(respawn, state.level.player2StartDir || Direction.LEFT, 3);
-      state = {
-        ...state,
-        rivalSnake: newSnake,
-        rivalDirection: state.level.player2StartDir || Direction.LEFT,
-        rivalNextDirection: state.level.player2StartDir || Direction.LEFT,
-        rivalAlive: true,
-      };
-    } else {
-      state = { ...state, rivalAlive: false };
-    }
-    return { state, events };
-  }
-
-  // Predator doesn't eat food — it just chases. But it grows slowly over time.
-  let newPSnake = [...state.rivalSnake, newPHead];
-  // Grow every 20 moves to get longer and more threatening
-  const shouldGrow = newPSnake.length <= 3 || (state.rivalFoodEaten % 20 === 0 && state.rivalFoodEaten > 0);
-  if (!shouldGrow) {
-    newPSnake.shift();
-  }
-
-  state = {
-    ...state,
-    rivalSnake: newPSnake,
-    rivalDirection: predDir,
-    rivalNextDirection: predDir,
-    rivalFoodEaten: state.rivalFoodEaten + 1, // track moves for growth
-  };
-
-  return { state, events };
-}
-
-function computePredatorDirection(state: GameState): Direction {
-  const difficulty = state.level.rivalAiDifficulty ?? 0.5;
-  const snake = state.rivalSnake!;
-  const head = snake[snake.length - 1];
-  const playerHead = state.snake[state.snake.length - 1];
-
-  const validDirs = getValidDirections(head, state.rivalDirection, state, snake);
-  if (validDirs.length === 0) return state.rivalDirection;
-
-  // Random chance based on difficulty (lower difficulty = more random)
-  if (Math.random() > difficulty) {
-    // Still bias slightly toward player
-    const biased = validDirs.filter(d => {
-      const next = applyDir(head, d);
-      return manhattan(next, playerHead) < manhattan(head, playerHead);
-    });
-    if (biased.length > 0 && Math.random() < 0.5) {
-      return biased[Math.floor(Math.random() * biased.length)];
-    }
-    return validDirs[Math.floor(Math.random() * validDirs.length)];
-  }
-
-  // High difficulty: use BFS to find player
-  if (difficulty >= 0.7) {
-    const bfsDir = bfsToTarget(head, playerHead, state, snake);
-    if (bfsDir !== null && validDirs.includes(bfsDir)) return bfsDir;
-  }
-
-  // Medium difficulty: try to cut off the player
-  // Predict where player will be in a few steps
-  if (difficulty >= 0.5) {
-    const predictedTarget = predictPlayerPosition(state, 3);
-    const cutoffDir = bfsToTarget(head, predictedTarget, state, snake);
-    if (cutoffDir !== null && validDirs.includes(cutoffDir)) return cutoffDir;
-  }
-
-  // Fallback: greedy approach toward player
-  validDirs.sort((a, b) => {
-    const pa = applyDir(head, a);
-    const pb = applyDir(head, b);
-    return manhattan(pa, playerHead) - manhattan(pb, playerHead);
-  });
-  return validDirs[0];
-}
-
-function predictPlayerPosition(state: GameState, steps: number): Point {
-  let pos = { ...state.snake[state.snake.length - 1] };
-  const dir = state.nextDirection;
-  for (let i = 0; i < steps; i++) {
-    const next = applyDir(pos, dir);
-    if (isWallOrOOB(next, state.level)) break;
-    pos = next;
-  }
-  return pos;
-}
-
-function bfsToTarget(start: Point, target: Point, state: GameState, selfSnake: Point[]): Direction | null {
-  const { gridWidth, gridHeight } = state.level;
-  const visited = new Set<string>();
-  const queue: { pos: Point; firstDir: Direction }[] = [];
-
-  const dirs = [Direction.UP, Direction.DOWN, Direction.LEFT, Direction.RIGHT];
-
-  for (const d of dirs) {
-    const next = applyDir(start, d);
-    if (isWallOrOOB(next, state.level)) continue;
-    if (selfSnake.some(s => pointsEqual(s, next))) continue;
-    // Don't avoid player body — we WANT to collide with them
-    const key = `${next.x},${next.y}`;
-    if (visited.has(key)) continue;
-    visited.add(key);
-    if (pointsEqual(next, target)) return d;
-    queue.push({ pos: next, firstDir: d });
-  }
-
-  let steps = 0;
-  while (queue.length > 0 && steps < 400) {
-    const { pos, firstDir } = queue.shift()!;
-    steps++;
-
-    for (const d of dirs) {
-      const next = applyDir(pos, d);
-      if (next.x < 0 || next.x >= gridWidth || next.y < 0 || next.y >= gridHeight) continue;
-      const key = `${next.x},${next.y}`;
-      if (visited.has(key)) continue;
-      if (isWallOrOOB(next, state.level)) continue;
-      if (selfSnake.some(s => pointsEqual(s, next))) continue;
-      visited.add(key);
-      if (pointsEqual(next, target)) return firstDir;
-      queue.push({ pos: next, firstDir });
-    }
-  }
-  return null;
 }
 
 // ==================== A* Snake ====================
@@ -1141,9 +826,6 @@ function aStarSearch(start: Point, goal: Point, state: GameState, selfSnake: Poi
   for (const w of state.level.walls) obstacles.add(`${w.x},${w.y}`);
   for (const s of selfSnake) obstacles.add(`${s.x},${s.y}`);
   for (const s of state.snake) obstacles.add(`${s.x},${s.y}`);
-  if (state.p2Snake) {
-    for (const s of state.p2Snake) obstacles.add(`${s.x},${s.y}`);
-  }
   for (const h of state.hazards) {
     if (h.warningTicks <= 0) obstacles.add(`${h.pos.x},${h.pos.y}`);
   }

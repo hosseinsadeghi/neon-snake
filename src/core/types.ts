@@ -8,12 +8,7 @@ export enum Direction {
 export enum TrackId {
   CLASSIC = 'classic',
   RIVAL = 'rival',
-  MULTIPLAYER = 'multiplayer',
-  HAZARDS = 'hazards',
-  PREDATOR = 'predator',
-  ASTAR = 'astar',
   INFINITE = 'infinite',
-  ENDLESS = 'endless',
   SWARM = 'swarm',
 }
 
@@ -139,15 +134,7 @@ export interface GameState {
   rivalNextDirection: Direction;
   rivalFoodEaten: number;
   rivalAlive: boolean;
-
-  // Multiplayer track
-  p2Snake: Point[] | null;
-  p2Direction: Direction;
-  p2NextDirection: Direction;
-  p2DirectionQueue: Direction[];
-  p2Score: number;
-  p2FoodEaten: number;
-  p2Alive: boolean;
+  useAstar: boolean;
 
   // Hazards track
   hazards: Hazard[];
@@ -179,10 +166,6 @@ export enum Action {
   DOWN,
   LEFT,
   RIGHT,
-  P2_UP,
-  P2_DOWN,
-  P2_LEFT,
-  P2_RIGHT,
   PAUSE,
   CONFIRM,
 }

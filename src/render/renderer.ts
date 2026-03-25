@@ -231,7 +231,6 @@ export class Renderer {
     this.drawSpecialFood(state);
     this.drawSnake(state);
     this.drawRivalSnake(state);
-    this.drawP2Snake(state);
     this.drawSwarmSnakes(state);
 
     // Particles
@@ -796,33 +795,18 @@ export class Renderer {
     ctx.textAlign = 'right';
     const rx = panelX + panelW - 12;
 
-    if (state.trackId === TrackId.MULTIPLAYER) {
-      ctx.fillStyle = NEON_CYAN;
-      ctx.shadowColor = NEON_CYAN;
-      ctx.shadowBlur = 4;
-      ctx.fillText(`P1: ${state.foodEaten}/${state.level.foodToWin}`, panelX + panelW / 2 - 8, topMidY);
-      ctx.fillStyle = NEON_GREEN;
-      ctx.shadowColor = NEON_GREEN;
-      ctx.fillText(`P2: ${state.p2FoodEaten}/${state.level.foodToWin}`, rx, topMidY);
-      ctx.shadowBlur = 0;
-    } else if (state.trackId === TrackId.RIVAL) {
-      ctx.fillStyle = NEON_ORANGE;
-      ctx.shadowColor = NEON_ORANGE;
-      ctx.shadowBlur = 4;
-      ctx.fillText(`RIVAL  ${state.rivalFoodEaten}/${state.level.foodToWin}`, rx, topMidY);
-      ctx.shadowBlur = 0;
-    } else if (state.trackId === TrackId.PREDATOR) {
-      const status = state.rivalAlive ? '\u26A0 HUNTING' : '\u23F3 RESPAWN';
-      ctx.fillStyle = '#cc00ff';
-      ctx.shadowColor = '#cc00ff';
-      ctx.shadowBlur = 4;
-      ctx.fillText(status, rx, topMidY);
-      ctx.shadowBlur = 0;
-    } else if (state.trackId === TrackId.ASTAR) {
-      ctx.fillStyle = '#ffaa00';
-      ctx.shadowColor = '#ffaa00';
-      ctx.shadowBlur = 4;
-      ctx.fillText(`A\u2605  ${state.rivalFoodEaten}/${state.level.foodToWin}`, rx, topMidY);
+    if (state.trackId === TrackId.RIVAL) {
+      if (state.useAstar) {
+        ctx.fillStyle = '#ffaa00';
+        ctx.shadowColor = '#ffaa00';
+        ctx.shadowBlur = 4;
+        ctx.fillText(`A\u2605  ${state.rivalFoodEaten}/${state.level.foodToWin}`, rx, topMidY);
+      } else {
+        ctx.fillStyle = NEON_ORANGE;
+        ctx.shadowColor = NEON_ORANGE;
+        ctx.shadowBlur = 4;
+        ctx.fillText(`RIVAL  ${state.rivalFoodEaten}/${state.level.foodToWin}`, rx, topMidY);
+      }
       ctx.shadowBlur = 0;
     } else if (state.trackId === TrackId.SWARM) {
       const alive = state.swarmSnakes.filter(s => s.alive).length;
@@ -831,7 +815,7 @@ export class Renderer {
       ctx.shadowBlur = 4;
       ctx.fillText(`SWARM  ${alive}/${state.swarmSnakes.length}`, rx, topMidY);
       ctx.shadowBlur = 0;
-    } else if (state.trackId === TrackId.HAZARDS && state.hazards.length > 0) {
+    } else if (state.hazards.length > 0) {
       ctx.fillStyle = '#ff0044';
       ctx.shadowColor = '#ff0044';
       ctx.shadowBlur = 4;
@@ -845,7 +829,7 @@ export class Renderer {
     const botMidY = botY + botH / 2;
 
     // Hearts for lives (left) — not shown in multiplayer/swarm
-    if (state.trackId !== TrackId.MULTIPLAYER && state.trackId !== TrackId.SWARM) {
+    if (state.trackId !== TrackId.SWARM) {
       ctx.font = '15px "Segoe UI", system-ui, sans-serif';
       ctx.textAlign = 'left';
       const maxLives = 3;
@@ -1019,21 +1003,17 @@ export class Renderer {
 
   private drawRivalSnake(state: GameState) {
     if (!state.rivalSnake || !state.rivalAlive) return;
-    if (state.trackId === TrackId.PREDATOR) {
-      this.drawSecondarySnake(state.rivalSnake, state.rivalDirection, '#cc00ff', '#ff0044', false);
-    } else if (state.trackId === TrackId.ASTAR) {
+    if (state.useAstar) {
       this.drawSecondarySnake(state.rivalSnake, state.rivalDirection, '#ffaa00', '#ff6600', false);
     } else {
-      // RIVAL, INFINITE, ENDLESS, or any track with a rival
       this.drawSecondarySnake(state.rivalSnake, state.rivalDirection, '#ff6600', '#ff2200', state.phase === GamePhase.DYING);
     }
   }
 
   // ============ Player 2 Snake ============
 
-  private drawP2Snake(state: GameState) {
-    if (state.trackId !== TrackId.MULTIPLAYER || !state.p2Snake || !state.p2Alive) return;
-    this.drawSecondarySnake(state.p2Snake, state.p2Direction, '#39ff14', '#00cc00', false);
+  private drawP2Snake(_state: GameState) {
+    // No-op: multiplayer track removed
   }
 
   // ============ Swarm Snakes ============

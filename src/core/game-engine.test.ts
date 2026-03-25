@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { createInitialState, applyAction, tick } from './game-engine';
 import { Action, Direction, GamePhase, GameState, LevelDef, TrackId } from './types';
 import { ALL_TRACKS, TRACK_GROUPS } from './levels/index';
-import { generateLevel, generateEndlessLevel } from './procedural';
+import { generateLevel } from './procedural';
 import { defaultProgress, migrateProgress } from '../data/storage-interface';
 
 // ==================== Test Helpers ====================
@@ -122,23 +122,10 @@ describe('createInitialState', () => {
     expect(state.rivalAlive).toBe(true);
   });
 
-  it('initializes P2 snake for MULTIPLAYER track', () => {
-    const level = makeLevel({
-      player2Start: { x: 5, y: 5 },
-      player2StartDir: Direction.LEFT,
-    });
-    const state = createInitialState(level, 0, 3, 0, TrackId.MULTIPLAYER);
-
-    expect(state.p2Snake).not.toBeNull();
-    expect(state.p2Snake).toHaveLength(3);
-    expect(state.p2Alive).toBe(true);
-  });
-
-  it('does not have rival or P2 for classic track', () => {
+  it('does not have rival for classic track', () => {
     const level = makeLevel();
     const state = createInitialState(level, 0, 3, 0, TrackId.CLASSIC);
     expect(state.rivalSnake).toBeNull();
-    expect(state.p2Snake).toBeNull();
   });
 });
 
@@ -224,15 +211,6 @@ describe('applyAction', () => {
     expect(result.directionQueue).toHaveLength(0);
   });
 
-  it('handles P2 direction actions in multiplayer mode', () => {
-    const level = makeLevel({
-      player2Start: { x: 5, y: 5 },
-      player2StartDir: Direction.LEFT,
-    });
-    let s = skipCountdown(createInitialState(level, 0, 3, 0, TrackId.MULTIPLAYER));
-    s = applyAction(s, Action.P2_UP);
-    expect(s.p2DirectionQueue).toContain(Direction.UP);
-  });
 });
 
 // ==================== Movement & Tick ====================
@@ -493,46 +471,6 @@ describe('tick - paused', () => {
   });
 });
 
-// ==================== Hazards ====================
-
-describe('hazards', () => {
-  it('does not kill during warning phase', () => {
-    const level = makeLevel({ snakeStart: { x: 5, y: 10 } });
-    let state = skipCountdown(createInitialState(level, 0, 3, 0, TrackId.HAZARDS));
-    state = {
-      ...state,
-      hazards: [{
-        pos: { x: 6, y: 10 },
-        ttl: 100,
-        maxTtl: 100,
-        type: 'skull',
-        warningTicks: 10, // still in warning
-      }],
-    };
-
-    const result = tick(state, state.currentSpeed);
-    expect(result.state.phase).toBe(GamePhase.PLAYING);
-  });
-
-  it('kills when hitting active hazard', () => {
-    const level = makeLevel({ snakeStart: { x: 5, y: 10 } });
-    let state = skipCountdown(createInitialState(level, 0, 3, 0, TrackId.HAZARDS));
-    state = {
-      ...state,
-      hazards: [{
-        pos: { x: 6, y: 10 },
-        ttl: 100,
-        maxTtl: 100,
-        type: 'skull',
-        warningTicks: 0, // active
-      }],
-    };
-
-    const result = tick(state, state.currentSpeed);
-    expect(result.state.phase).toBe(GamePhase.DYING);
-  });
-});
-
 // ==================== Tracks & Levels Index ====================
 
 describe('track definitions', () => {
@@ -540,12 +478,9 @@ describe('track definitions', () => {
     const ids = ALL_TRACKS.map((t: any) => t.id);
     expect(ids).toContain(TrackId.CLASSIC);
     expect(ids).toContain(TrackId.INFINITE);
-    expect(ids).toContain(TrackId.ENDLESS);
     expect(ids).toContain(TrackId.RIVAL);
-    expect(ids).toContain(TrackId.PREDATOR);
-    expect(ids).toContain(TrackId.ASTAR);
-    expect(ids).toContain(TrackId.HAZARDS);
-    expect(ids).toContain(TrackId.MULTIPLAYER);
+    expect(ids).toContain(TrackId.SWARM);
+    expect(ids).toHaveLength(4);
   });
 
   it('each track has valid properties', () => {
@@ -582,12 +517,6 @@ describe('procedural generation', () => {
     const l1 = generateLevel(1, TrackId.INFINITE);
     const l50 = generateLevel(50, TrackId.INFINITE);
     expect(l1.walls.length === l50.walls.length && l1.initialSpeed === l50.initialSpeed).toBe(false);
-  });
-
-  it('generates endless levels', () => {
-    const level = generateEndlessLevel();
-    expect(level.gridWidth).toBeGreaterThan(0);
-    expect(level.foodToWin).toBeGreaterThan(0);
   });
 });
 

@@ -15,22 +15,19 @@ describe('Track Select UI rendering', () => {
     document = dom.window.document;
   });
 
-  function renderTrackGrid(tracks: TrackDef[], hideMultiplayer = true) {
+  function renderTrackGrid(tracks: TrackDef[]) {
     const trackGrid = document.getElementById('track-grid')!;
     trackGrid.innerHTML = '';
 
     for (const group of TRACK_GROUPS) {
-      const groupTracks = hideMultiplayer
-        ? group.tracks.filter(t => t.id !== TrackId.MULTIPLAYER)
-        : group.tracks;
-      if (groupTracks.length === 0) continue;
+      if (group.tracks.length === 0) continue;
 
       const groupLabel = document.createElement('div');
       groupLabel.className = 'track-group-label';
       groupLabel.textContent = group.label;
       trackGrid.appendChild(groupLabel);
 
-      for (const track of groupTracks) {
+      for (const track of group.tracks) {
         const card = document.createElement('div');
         card.className = 'track-card';
         card.dataset.trackId = track.id;
@@ -47,33 +44,26 @@ describe('Track Select UI rendering', () => {
     }
   }
 
-  it('renders all non-hidden tracks in groups', () => {
-    renderTrackGrid(ALL_TRACKS, true);
+  it('renders all tracks in groups', () => {
+    renderTrackGrid(ALL_TRACKS);
     const grid = document.getElementById('track-grid')!;
     const cards = grid.querySelectorAll('.track-card');
     const labels = grid.querySelectorAll('.track-group-label');
 
-    // 8 tracks visible (MULTIPLAYER hidden), 3 group labels
-    expect(cards.length).toBe(8);
-    expect(labels.length).toBe(3);
-  });
-
-  it('renders all tracks including VERSUS in dev mode', () => {
-    renderTrackGrid(ALL_TRACKS, false);
-    const grid = document.getElementById('track-grid')!;
-    const cards = grid.querySelectorAll('.track-card');
-    expect(cards.length).toBe(9);
+    // 4 tracks, 2 group labels (SOLO, VS AI)
+    expect(cards.length).toBe(4);
+    expect(labels.length).toBe(2);
   });
 
   it('renders group labels with correct text', () => {
-    renderTrackGrid(ALL_TRACKS, true);
+    renderTrackGrid(ALL_TRACKS);
     const labels = document.querySelectorAll('.track-group-label');
     const texts = Array.from(labels).map(l => l.textContent);
-    expect(texts).toEqual(['SOLO', 'VS AI', 'SPECIAL']);
+    expect(texts).toEqual(['SOLO', 'VS AI']);
   });
 
   it('each card has an icon, name, and description', () => {
-    renderTrackGrid(ALL_TRACKS, true);
+    renderTrackGrid(ALL_TRACKS);
     const cards = document.querySelectorAll('.track-card');
 
     for (const card of Array.from(cards)) {
@@ -83,23 +73,20 @@ describe('Track Select UI rendering', () => {
     }
   });
 
-  it('SOLO group contains Classic, Infinite, Endless', () => {
+  it('SOLO group contains Classic, Infinite', () => {
     const soloGroup = TRACK_GROUPS.find(g => g.label === 'SOLO')!;
     const ids = soloGroup.tracks.map(t => t.id);
     expect(ids).toContain(TrackId.CLASSIC);
     expect(ids).toContain(TrackId.INFINITE);
-    expect(ids).toContain(TrackId.ENDLESS);
-    expect(ids).toHaveLength(3);
+    expect(ids).toHaveLength(2);
   });
 
-  it('VS AI group contains Rival, Predator, A* Hunt, Swarm', () => {
+  it('VS AI group contains Rival, Swarm', () => {
     const aiGroup = TRACK_GROUPS.find(g => g.label === 'VS AI')!;
     const ids = aiGroup.tracks.map(t => t.id);
     expect(ids).toContain(TrackId.RIVAL);
-    expect(ids).toContain(TrackId.PREDATOR);
-    expect(ids).toContain(TrackId.ASTAR);
     expect(ids).toContain(TrackId.SWARM);
-    expect(ids).toHaveLength(4);
+    expect(ids).toHaveLength(2);
   });
 });
 
@@ -115,17 +102,6 @@ describe('Track progress text', () => {
       if (levelsPlayed === 0) return 'Not started';
       return `${totalStars} \u2605 \u00B7 Level ${tp.highestLevelUnlocked} reached`;
     }
-    if (track.id === TrackId.ENDLESS) {
-      const bestScore = Object.values(tp.levelScores).reduce((a: number, b: number) => Math.max(a, b), 0);
-      if (bestScore === 0) return 'Not started';
-      return `Best: ${bestScore} pts`;
-    }
-    if (track.id === TrackId.MULTIPLAYER) {
-      const gamesPlayed = Object.keys(tp.levelScores).length;
-      if (gamesPlayed === 0) return 'P1: WASD \u00B7 P2: Arrows';
-      return `${gamesPlayed} games played`;
-    }
-
     const maxStars = track.levels.length * 3;
     if (totalStars === 0) return `${track.levels.length} levels`;
     return `${totalStars}/${maxStars} \u2605 \u00B7 ${track.levels.length} levels`;
@@ -149,19 +125,6 @@ describe('Track progress text', () => {
     expect(text).toContain('2 \u2605');
   });
 
-  it('shows "Not started" for Endless with no progress', () => {
-    const endless = ALL_TRACKS.find(t => t.id === TrackId.ENDLESS)!;
-    const progress = defaultProgress();
-    expect(getTrackProgressText(endless, progress)).toBe('Not started');
-  });
-
-  it('shows best score for Endless with progress', () => {
-    const endless = ALL_TRACKS.find(t => t.id === TrackId.ENDLESS)!;
-    const progress = defaultProgress();
-    progress.tracks[TrackId.ENDLESS].levelScores = { 1: 450 };
-    expect(getTrackProgressText(endless, progress)).toBe('Best: 450 pts');
-  });
-
   it('shows level count for Classic with no stars', () => {
     const classic = ALL_TRACKS.find(t => t.id === TrackId.CLASSIC)!;
     const progress = defaultProgress();
@@ -177,13 +140,6 @@ describe('Track progress text', () => {
     expect(text).toContain('15 levels');
   });
 
-  it('shows controls hint for Multiplayer with no progress', () => {
-    const versus = ALL_TRACKS.find(t => t.id === TrackId.MULTIPLAYER)!;
-    const progress = defaultProgress();
-    expect(getTrackProgressText(versus, progress)).toContain('WASD');
-    expect(getTrackProgressText(versus, progress)).toContain('Arrows');
-  });
-
   it('never shows "0/0" or "0 levels" for Infinite', () => {
     const infinite = ALL_TRACKS.find(t => t.id === TrackId.INFINITE)!;
     const progress = defaultProgress();
@@ -192,13 +148,6 @@ describe('Track progress text', () => {
     expect(text).not.toContain('0 levels');
   });
 
-  it('never shows "0/0" or "0 levels" for Endless', () => {
-    const endless = ALL_TRACKS.find(t => t.id === TrackId.ENDLESS)!;
-    const progress = defaultProgress();
-    const text = getTrackProgressText(endless, progress);
-    expect(text).not.toContain('0/0');
-    expect(text).not.toContain('0 levels');
-  });
 });
 
 // ==================== Screen Management ====================
@@ -328,13 +277,6 @@ describe('InputManager', () => {
     expect(keyMap['d']).toBe(3);
   });
 
-  it('maps arrow keys differently in multiplayer mode', () => {
-    // In multiplayer: arrows = P2, WASD = P1
-    // P2_UP = 4, P2_DOWN = 5, P2_LEFT = 6, P2_RIGHT = 7
-    const isMultiplayer = true;
-    const action = isMultiplayer ? 4 : 0; // P2_UP vs UP
-    expect(action).toBe(4);
-  });
 });
 
 // ==================== Keyboard Menu Navigation ====================
@@ -387,7 +329,8 @@ describe('Keyboard menu navigation', () => {
         <div id="track-grid" class="track-grid">
           <div class="track-card" data-track-id="classic">Classic</div>
           <div class="track-card" data-track-id="infinite">Infinite</div>
-          <div class="track-card" data-track-id="endless">Endless</div>
+          <div class="track-card" data-track-id="rival">Rival</div>
+          <div class="track-card" data-track-id="swarm">Swarm</div>
         </div>
         <button id="btn-back-title-from-tracks" class="btn btn-back">Back</button>
       </div>

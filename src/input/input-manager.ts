@@ -23,25 +23,24 @@ export class InputManager {
 
   private onKeyDown(e: KeyboardEvent) {
     if (!this.enabled) return;
-    const isMultiplayer = this.mode === TrackId.MULTIPLAYER;
 
     switch (e.key) {
-      // Arrow keys: P1 in single-player, P2 in multiplayer
+      // Arrow keys: always P1
       case 'ArrowUp':
         e.preventDefault();
-        this.actionQueue.push(isMultiplayer ? Action.P2_UP : Action.UP);
+        this.actionQueue.push(Action.UP);
         break;
       case 'ArrowDown':
         e.preventDefault();
-        this.actionQueue.push(isMultiplayer ? Action.P2_DOWN : Action.DOWN);
+        this.actionQueue.push(Action.DOWN);
         break;
       case 'ArrowLeft':
         e.preventDefault();
-        this.actionQueue.push(isMultiplayer ? Action.P2_LEFT : Action.LEFT);
+        this.actionQueue.push(Action.LEFT);
         break;
       case 'ArrowRight':
         e.preventDefault();
-        this.actionQueue.push(isMultiplayer ? Action.P2_RIGHT : Action.RIGHT);
+        this.actionQueue.push(Action.RIGHT);
         break;
 
       // WASD: always P1

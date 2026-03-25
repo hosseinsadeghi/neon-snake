@@ -231,16 +231,6 @@ function getTrackModifiers(trackId: TrackId, level: number): ProceduralModifiers
       base.chaos = level >= 300;
       break;
 
-    case TrackId.HAZARDS:
-      // Hazards always present, escalating
-      base.hasHazards = true;
-      base.extremeHazards = level >= 30;
-      base.hazardHell = level >= 80;
-      base.tinyArena = level >= 60;
-      base.hyperSpeed = level >= 100;
-      base.chaos = level >= 200;
-      break;
-
     case TrackId.RIVAL:
       // Rival always present, gets smarter
       base.hasRival = true;
@@ -249,28 +239,6 @@ function getTrackModifiers(trackId: TrackId, level: number): ProceduralModifiers
       base.hasHazards = level >= 40;
       base.hyperSpeed = level >= 100;
       base.chaos = level >= 200;
-      break;
-
-    case TrackId.PREDATOR:
-      // Predator always present (handled by engine), walls add challenge
-      base.hasRival = true; // rival snake used as predator
-      base.aggressiveRival = true; // always aggressive
-      base.rivalHell = level >= 40;
-      base.hasHazards = level >= 50;
-      base.tinyArena = level >= 80;
-      base.hyperSpeed = level >= 120;
-      base.chaos = level >= 200;
-      break;
-
-    case TrackId.ASTAR:
-      // A* rival always present, near-perfect from the start
-      base.hasRival = true;
-      base.aggressiveRival = true;
-      base.rivalHell = true; // always max difficulty for A*
-      base.hasHazards = level >= 30;
-      base.tinyArena = level >= 50;
-      base.hyperSpeed = level >= 80;
-      base.chaos = level >= 150;
       break;
   }
 
@@ -320,10 +288,7 @@ export function generateLevel(levelNum: number, trackId: TrackId = TrackId.INFIN
   const trackSeed: Record<string, number> = {
     [TrackId.INFINITE]: 104729,
     [TrackId.CLASSIC]: 208631,
-    [TrackId.HAZARDS]: 312547,
     [TrackId.RIVAL]: 416459,
-    [TrackId.PREDATOR]: 520361,
-    [TrackId.ASTAR]: 624277,
   };
   const rng = new SeededRNG(levelNum * 7919 + (trackSeed[trackId] || 104729));
 
@@ -511,28 +476,3 @@ function getDescription(mods: ProceduralModifiers, level: number): string {
   return `Level ${level}. Features: ${parts.join(', ')}.`;
 }
 
-// ==================== Endless Survival ====================
-// Returns a base level for endless mode. The actual difficulty
-// ramps during gameplay (handled by the game engine).
-
-export function generateEndlessLevel(): LevelDef {
-  return {
-    id: 1,
-    name: 'Endless',
-    description: 'Survive as long as you can!',
-    gridWidth: 28,
-    gridHeight: 28,
-    walls: borderWalls(28, 28),
-    initialSpeed: 140,
-    speedIncrement: 1,
-    foodToWin: 999999, // never ends
-    specialFoodChance: 0.1,
-    portalPairs: [],
-    snakeStart: { x: 14, y: 14 },
-    snakeStartDir: Direction.RIGHT,
-    growAmount: 1,
-    hazardSpawnInterval: 40,
-    hazardMaxActive: 3,
-    hazardLifetime: 30,
-  };
-}

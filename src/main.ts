@@ -2,7 +2,7 @@ import './style.css';
 import { Action, Direction, GamePhase, GameState, PlayerProgress, TrackDef, TrackId } from './core/types';
 import { createInitialState, applyAction, tick, GameEvent } from './core/game-engine';
 import { ALL_TRACKS, TRACK_GROUPS } from './core/levels/index';
-import { generateLevel, generateEndlessLevel } from './core/procedural';
+import { generateLevel } from './core/procedural';
 import { Renderer } from './render/renderer';
 import { InputManager } from './input/input-manager';
 import { LocalStorageService } from './data/local-storage';
@@ -43,6 +43,7 @@ let currentTrack: TrackDef | null = null;
 let lastLevelIndex = 0;
 let pendingSwarmLevelIndex = 0; // level index waiting for swarm config
 let lastSwarmLevel: import('./core/types').LevelDef | null = null; // cached swarm level with custom spawns
+let rivalUseAstar = false;
 
 const canvas = document.getElementById('game-canvas') as HTMLCanvasElement;
 const renderer = new Renderer(canvas);
@@ -399,16 +400,6 @@ function getTrackProgressText(track: typeof ALL_TRACKS[0]): string {
     if (levelsPlayed === 0) return 'Not started';
     return `${totalStars} \u2605 \u00B7 Level ${tp.highestLevelUnlocked} reached`;
   }
-  if (track.id === TrackId.ENDLESS) {
-    const bestScore = Object.values(tp.levelScores).reduce((a, b) => Math.max(a, b), 0);
-    if (bestScore === 0) return 'Not started';
-    return `Best: ${bestScore} pts`;
-  }
-  if (track.id === TrackId.MULTIPLAYER) {
-    const gamesPlayed = Object.keys(tp.levelScores).length;
-    if (gamesPlayed === 0) return 'P1: WASD \u00B7 P2: Arrows';
-    return `${gamesPlayed} games played`;
-  }
 
   const maxStars = track.levels.length * 3;
   if (totalStars === 0) return `${track.levels.length} levels`;
@@ -417,21 +408,17 @@ function getTrackProgressText(track: typeof ALL_TRACKS[0]): string {
 
 function renderTrackSelect() {
   trackGrid.innerHTML = '';
-  const hideMultiplayer = !devMode;
   let animIndex = 0;
 
   for (const group of TRACK_GROUPS) {
-    const groupTracks = hideMultiplayer
-      ? group.tracks.filter(t => t.id !== TrackId.MULTIPLAYER)
-      : group.tracks;
-    if (groupTracks.length === 0) continue;
+    if (group.tracks.length === 0) continue;
 
     const groupLabel = document.createElement('div');
     groupLabel.className = 'track-group-label';
     groupLabel.textContent = group.label;
     trackGrid.appendChild(groupLabel);
 
-    for (const track of groupTracks) {
+    for (const track of group.tracks) {
       const card = document.createElement('div');
       card.className = 'track-card';
       card.style.animationDelay = `${animIndex * 0.08}s`;
@@ -459,12 +446,8 @@ function renderTrackSelect() {
       card.addEventListener('click', () => {
         currentTrack = track;
         levelPage = 0;
-        if (track.id === TrackId.ENDLESS) {
-          startEndless();
-        } else {
-          showScreen(levelScreen);
-          renderLevelSelect();
-        }
+        showScreen(levelScreen);
+        renderLevelSelect();
       });
 
       trackGrid.appendChild(card);
@@ -490,7 +473,7 @@ function renderLevelSelect() {
   const fixedLevels = currentTrack.levels;
   const fixedCount = fixedLevels.length;
   const tp = progress.tracks[currentTrack.id] || { highestLevelUnlocked: 1, levelScores: {}, levelStars: {} };
-  const isInfiniteCapable = currentTrack.id !== TrackId.ENDLESS;
+  const isInfiniteCapable = true;
 
   // In dev mode: show many levels and unlock all
   const highestUnlocked = devMode ? 9999 : tp.highestLevelUnlocked;
@@ -514,6 +497,22 @@ function renderLevelSelect() {
 
   levelGrid.innerHTML = '';
   levelGrid.style.gridTemplateColumns = 'repeat(5, 1fr)';
+
+  // A* mode toggle for Rival track
+  if (currentTrack.id === TrackId.RIVAL) {
+    const toggleRow = document.createElement('div');
+    toggleRow.style.cssText = 'grid-column: 1 / -1; display: flex; align-items: center; justify-content: center; gap: 10px; padding: 8px 0;';
+    const toggleBtn = document.createElement('button');
+    toggleBtn.className = 'menu-btn';
+    toggleBtn.style.cssText = `font-size: 0.85rem; padding: 6px 18px; min-width: 160px; background: ${rivalUseAstar ? 'rgba(0,200,255,0.25)' : 'rgba(255,255,255,0.08)'}; border: 1px solid ${rivalUseAstar ? '#00c8ff' : 'rgba(255,255,255,0.2)'}; color: ${rivalUseAstar ? '#00c8ff' : '#888'};`;
+    toggleBtn.textContent = `A\u2605 MODE: ${rivalUseAstar ? 'ON' : 'OFF'}`;
+    toggleBtn.addEventListener('click', () => {
+      rivalUseAstar = !rivalUseAstar;
+      renderLevelSelect();
+    });
+    toggleRow.appendChild(toggleBtn);
+    levelGrid.appendChild(toggleRow);
+  }
 
   for (let i = pageStart; i < pageEnd; i++) {
     const levelNum = i + 1; // 1-based display number
@@ -598,19 +597,8 @@ function startProceduralLevel(levelNum: number) {
   showScreen(null);
   lastLevelIndex = levelNum - 1;
   gameState = createInitialState(level, levelNum - 1, 3, 0, currentTrack.id);
+  if (currentTrack.id === TrackId.RIVAL) gameState!.useAstar = rivalUseAstar;
   input.setMode(currentTrack.id);
-  renderer.resize();
-  renderer.getParticles().clear();
-  renderer.clearFloatingTexts();
-}
-
-function startEndless() {
-  if (!currentTrack) return;
-  const level = generateEndlessLevel();
-  showScreen(null);
-  lastLevelIndex = 0;
-  gameState = createInitialState(level, 0, 1, 0, TrackId.ENDLESS);
-  input.setMode(TrackId.ENDLESS);
   renderer.resize();
   renderer.getParticles().clear();
   renderer.clearFloatingTexts();
@@ -623,7 +611,7 @@ function startLevel(levelIndex: number) {
   const fixedCount = currentTrack.levels.length;
 
   // If beyond fixed levels, use procedural generation
-  if (levelIndex >= fixedCount && currentTrack.id !== TrackId.ENDLESS) {
+  if (levelIndex >= fixedCount) {
     const proceduralNum = levelIndex + 1; // 1-based level number for procedural
     startProceduralLevel(proceduralNum);
     return;
@@ -657,6 +645,7 @@ function launchLevel(levelIndex: number, overrideLevel?: import('./core/types').
     lastSwarmLevel = null;
   }
   gameState = createInitialState(level, levelIndex, 3, 0, currentTrack.id);
+  if (currentTrack.id === TrackId.RIVAL) gameState!.useAstar = rivalUseAstar;
   input.setMode(currentTrack.id);
   renderer.resize();
   renderer.getParticles().clear();
@@ -720,13 +709,7 @@ function handleEvents(events: GameEvent[]) {
   for (const ev of events) {
     switch (ev.type) {
       case 'food_eaten':
-        if (ev.player === 'p2') {
-          // P2 ate - different color particles
-          const px2 = ev.pos;
-          renderer.emitFoodParticles(px2); // reuse green particles
-        } else {
-          renderer.emitFoodParticles(ev.pos);
-        }
+        renderer.emitFoodParticles(ev.pos);
         break;
       case 'special_food_eaten':
         renderer.emitSpecialFoodParticles(ev.pos);
@@ -734,8 +717,6 @@ function handleEvents(events: GameEvent[]) {
       case 'death':
         if (ev.player === 'rival') {
           renderer.emitRivalDeathParticles(ev.pos);
-        } else if (ev.player === 'p2') {
-          renderer.emitP2DeathParticles(ev.pos);
         } else {
           renderer.emitDeathParticles(ev.pos);
         }
@@ -743,19 +724,11 @@ function handleEvents(events: GameEvent[]) {
       case 'rival_ate_food':
         renderer.emitRivalAteParticles(ev.pos);
         break;
-      case 'hazard_spawn':
-        renderer.emitHazardSpawnParticles(ev.pos);
-        break;
-      case 'hazard_hit':
-        renderer.emitHazardHitParticles(ev.pos);
-        break;
       case 'portal_used':
         renderer.emitPortalParticles(ev.from);
         renderer.emitPortalParticles(ev.to);
         break;
-      case 'level_complete':
-      case 'p1_wins':
-      case 'p2_wins': {
+      case 'level_complete': {
         if (!gameState || !currentTrack) break;
         const lvl = gameState.level;
         const score = gameState.levelScore;
@@ -793,22 +766,13 @@ document.getElementById('btn-resume')!.addEventListener('click', () => hidePause
 
 document.getElementById('btn-restart')!.addEventListener('click', () => {
   pauseMenu.classList.add('hidden');
-  if (currentTrack?.id === TrackId.ENDLESS) {
-    startEndless();
-  } else {
-    launchLevel(lastLevelIndex);
-  }
+  launchLevel(lastLevelIndex);
 });
 
 document.getElementById('btn-quit-to-levels')!.addEventListener('click', () => {
   gameState = null;
-  if (currentTrack?.id === TrackId.ENDLESS) {
-    showScreen(trackScreen);
-    renderTrackSelect();
-  } else {
-    showScreen(levelScreen);
-    renderLevelSelect();
-  }
+  showScreen(levelScreen);
+  renderLevelSelect();
 });
 
 document.getElementById('btn-quit-to-title')!.addEventListener('click', () => {
@@ -818,22 +782,13 @@ document.getElementById('btn-quit-to-title')!.addEventListener('click', () => {
 
 document.getElementById('btn-retry')!.addEventListener('click', () => {
   gameoverScreen.classList.add('hidden');
-  if (currentTrack?.id === TrackId.ENDLESS) {
-    startEndless();
-  } else {
-    launchLevel(lastLevelIndex);
-  }
+  launchLevel(lastLevelIndex);
 });
 
 document.getElementById('btn-gameover-levels')!.addEventListener('click', () => {
   gameState = null;
-  if (currentTrack?.id === TrackId.ENDLESS) {
-    showScreen(trackScreen);
-    renderTrackSelect();
-  } else {
-    showScreen(levelScreen);
-    renderLevelSelect();
-  }
+  showScreen(levelScreen);
+  renderLevelSelect();
 });
 
 document.getElementById('btn-gameover-title')!.addEventListener('click', () => {
@@ -849,7 +804,7 @@ swarmSlider.addEventListener('input', () => {
 
 document.getElementById('btn-swarm-start')!.addEventListener('click', () => {
   if (!currentTrack) return;
-  const count = Math.min(100, Math.max(1, parseInt(swarmSlider.value, 10) || 5));
+  const count = Math.min(20, Math.max(1, parseInt(swarmSlider.value, 10) || 5));
   const level = { ...currentTrack.levels[pendingSwarmLevelIndex] };
   level.swarmSpawns = generateSwarmSpawns(count, level.gridWidth, level.gridHeight, level.walls);
   launchLevel(pendingSwarmLevelIndex, level);
